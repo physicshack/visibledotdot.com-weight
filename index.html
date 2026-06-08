@@ -687,8 +687,11 @@
       <div class="card-header">🎯 Goals</div>
       <div class="goal-section">
         <div class="goal-input">
-          <label>Start Weight (for projection)</label>
-          <input type="number" id="goalStart" step="0.1" placeholder="kg" oninput="updateGoals()">
+          <label>Start Weight <span style="color:var(--muted);font-size:10px;">(projection counts from today)</span></label>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="number" id="goalStart" step="0.1" placeholder="kg" oninput="updateGoals()" style="flex:1;">
+            <button class="btn btn-ghost btn-sm" onclick="resetGoalStart()" title="Reset to latest weight">↺ Now</button>
+          </div>
         </div>
         <div class="goal-input">
           <label>Target Weight</label>
@@ -1437,7 +1440,8 @@ function renderStats() {
   // Recent period (last 30d)
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
   const recent = sorted.filter(d => new Date(d.date) >= cutoff);
-  const recentLost = recent.length > 1 ? recent[recent.length-1].kg - recent[0].kg : 0;
+  // recentLost: negative = lost weight (same sign convention as 'change' / Since Last)
+  const recentLost = recent.length > 1 ? recent[0].kg - recent[recent.length-1].kg : 0;
 
   document.getElementById('statsGrid').innerHTML = `
     <div class="stat-card">
@@ -1467,8 +1471,8 @@ function renderStats() {
     </div>
     <div class="stat-card">
       <div class="stat-label">Last 30 Days</div>
-      <div class="stat-value ${recentLost < 0 ? 'stat-bad' : 'stat-good'}">${recentLost > 0 ? '+' : ''}${recentLost.toFixed(1)} kg</div>
-      <div class="stat-sub">${recent.length} readings</div>
+      <div class="stat-value ${recentLost < 0 ? 'stat-good' : recentLost > 0 ? 'stat-bad' : ''}">${recentLost > 0 ? '+' : ''}${recentLost.toFixed(1)} kg</div>
+      <div class="stat-sub">${recentLost < 0 ? '↓ ' : recentLost > 0 ? '↑ ' : ''}${Math.abs(recentLost * 2.20462).toFixed(1)} lb · ${recent.length} readings</div>
     </div>
   `;
 
@@ -1495,6 +1499,13 @@ function renderStats() {
 // ═══════════════════════════════════════
 // GOALS
 // ═══════════════════════════════════════
+function resetGoalStart() {
+  const sorted = [...weightData].sort((a,b) => b.date.localeCompare(a.date));
+  if (!sorted.length) return;
+  document.getElementById('goalStart').value = sorted[0].kg.toFixed(1);
+  updateGoals();
+}
+
 function updateGoals() {
   const start = parseFloat(document.getElementById('goalStart').value);
   const target = parseFloat(document.getElementById('goalTarget').value);
