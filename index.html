@@ -1012,6 +1012,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script>
 // ═══════════════════════════════════════
 // DATA
@@ -1607,7 +1608,7 @@ function renderChart() {
   const trendStart = interceptIdx;
   const trendEnd = interceptIdx + slopeIdx * (m - 1);
   const trend = [trendStart, trendEnd];
-  const trendLabels = [labels[0], labels[m - 1]];
+  const trendLabels = [new Date(labels[0]).getTime(), new Date(labels[m - 1]).getTime()];
 
   // Weekly rate: slope of the same regression but in kg/week using real day span
   // slopeIdx is in display-units per index. Convert back to kg per index, then scale by real days.
@@ -1705,7 +1706,11 @@ function renderChart() {
       },
       scales: {
         x: {
-          type: 'category',
+          type: 'time',
+          time: {
+            tooltipFormat: 'yyyy-MM-dd',
+            displayFormats: { day: 'dd MMM', month: 'MMM yy', year: 'yyyy' }
+          },
           ticks: { color: '#7a7f9a', maxTicksLimit: 10, font: { size: 10 }, maxRotation: 0 },
           grid: { color: 'rgba(46,50,72,0.5)' }
         },
@@ -1748,14 +1753,17 @@ function saveEntry() {
   }
   const {stone, lbs} = kgToStLbs(kg);
   const frac = lbs - Math.floor(lbs);
-  const existing = weightData.findIndex(d => d.date === date);
-  const rec = {date, stone: Math.floor(stone), lbs: Math.floor(lbs), frac: +frac.toFixed(2), kg};
+  const now = new Date();
+  const timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+  const rec = {date, time: timeStr, stone: Math.floor(stone), lbs: Math.floor(lbs), frac: +frac.toFixed(2), kg};
+  const existing = weightData.findIndex(d => d.date === date && d.time === timeStr);
   if (existing >= 0) {
     weightData[existing] = rec;
     document.getElementById('entryMsg').textContent = '✓ Updated existing entry.';
   } else {
+    const sameDay = weightData.filter(d => d.date === date).length;
     weightData.push(rec);
-    document.getElementById('entryMsg').textContent = '✓ Entry saved!';
+    document.getElementById('entryMsg').textContent = sameDay > 0 ? `✓ Additional entry saved for ${date}.` : '✓ Entry saved!';
   }
   // Clear form
   document.getElementById('entryStone').value = '';
@@ -1795,7 +1803,7 @@ function renderTable() {
     const b = bmi(d.kg);
     const {label, cls} = bmiStatus(b);
     return `<tr id="row-${d.date}">
-      <td>${d.date}</td>
+      <td>${d.date}${d.time ? `<br><span style="font-size:10px;color:var(--muted)">${d.time}</span>` : ''}</td>
       <td>${d.stone}st ${d.lbs + d.frac}lb</td>
       <td>${(d.stone * 14 + d.lbs + d.frac).toFixed(1)} lb</td>
       <td>${d.kg.toFixed(1)}</td>
@@ -2067,9 +2075,10 @@ function logMealToJournal() {
   if (!items.length) { alert('No items in meal.'); return; }
   const totCals = parseInt(document.getElementById('totCals').textContent);
   const summary = `OMAD Meal (${totCals} cal):\n` + items.join(', ');
+  document.getElementById('jDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('jComment').value = summary;
   showPage('journal');
-  document.querySelectorAll('nav button')[1].click();
+  document.querySelector('.journal-form').scrollIntoView({behavior: 'smooth'});
 }
 
 // ═══════════════════════════════════════
