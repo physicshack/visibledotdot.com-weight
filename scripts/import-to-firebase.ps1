@@ -69,7 +69,7 @@ try {
     Write-Host ""
     Write-Host "Open the app, click the 👤 Guest button, and enter: $Username"
 } catch {
-    $statusCode = $_.Exception.Response?.StatusCode?.value__
+    $statusCode = if ($_.Exception.Response) { $_.Exception.Response.StatusCode.value__ } else { 'unknown' }
     Write-Host ""
     Write-Error "Upload failed (HTTP $statusCode): $_"
     Write-Host ""
