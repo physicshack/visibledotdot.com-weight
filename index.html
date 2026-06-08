@@ -583,6 +583,9 @@
     .journal-form-grid { grid-template-columns: 1fr 1fr; }
   }
 </style>
+<!-- Firebase compat SDK (loaded sync so available when init() runs) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
@@ -596,6 +599,8 @@
   </nav>
   <div style="margin-left:auto; display:flex; align-items:center; gap:10px;">
     <span id="saveIndicator" style="font-size:12px; color:var(--accent); opacity:0; transition:opacity 0.4s;">✓ Saved</span>
+    <span id="syncBadge" style="font-size:11px; color:var(--accent); opacity:0; transition:opacity 0.4s;"></span>
+    <button class="btn btn-ghost btn-sm" onclick="openUserModal()" title="Set username for cloud sync">👤 <span id="userLabel">Guest</span></button>
     <button class="btn btn-ghost btn-sm" onclick="exportJSON()" title="Export all data as JSON backup">⬇ Export</button>
     <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importFile').click()" title="Import JSON backup">⬆ Import</button>
     <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
@@ -616,6 +621,26 @@
       <button class="btn btn-sm" onclick="applyImport('merge')">Merge</button>
       <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importModal').style.display='none'">Cancel</button>
     </div>
+  </div>
+</div>
+
+<!-- User / cloud sync modal -->
+<div id="userModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:300; align-items:center; justify-content:center;">
+  <div style="background:var(--surface); border:1px solid var(--accent); border-radius:16px; padding:24px; max-width:400px; width:90%; margin:0 24px;">
+    <div style="font-family:'DM Serif Display',serif; font-size:16px; color:var(--accent); margin-bottom:8px;">☁ Cloud Sync</div>
+    <p style="font-size:12px; color:var(--muted); margin-bottom:16px; line-height:1.6;">
+      Enter a username to sync your data across devices. No password — data is stored under your chosen name.<br>
+      <span style="color:var(--accent3);">⚠ Anyone who knows your username can read your data.</span>
+    </p>
+    <input type="text" id="userInput" placeholder="e.g. davejfowler"
+      style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:14px; margin-bottom:16px; box-sizing:border-box;"
+      onkeydown="if(event.key==='Enter') setUser()">
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn btn-sm" onclick="setUser()">Connect</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearUser()">Sign out (local only)</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeUserModal()">Cancel</button>
+    </div>
+    <div id="userModalMsg" style="margin-top:12px; font-size:12px; color:var(--muted);"></div>
   </div>
 </div>
 
@@ -2294,6 +2319,7 @@ async function persistAll() {
       await window.storage.set('weightTrackerData', JSON.stringify(data));
     }
     showSaved();
+    syncToFirebase(); // non-blocking — fire and forget
   } catch (e) {
     showSaveError('⚠ Save failed');
   }
@@ -2341,10 +2367,166 @@ async function loadPersisted() {
 }
 
 // ═══════════════════════════════════════
+// FIREBASE SYNC
+// ═══════════════════════════════════════
+const FIREBASE_URL = 'https://paymind-b1d51-default-rtdb.europe-west1.firebasedatabase.app';
+let firebaseDB = null;
+let fbUser = localStorage.getItem('weightUser') || '';
+let fbSyncing = false;
+
+function initFirebase() {
+  if (typeof firebase === 'undefined') {
+    console.warn('[weight] Firebase SDK not loaded');
+    return false;
+  }
+  try {
+    // Delete any existing apps to allow re-init after username change
+    if (firebase.apps && firebase.apps.length) {
+      firebase.apps.forEach(a => { try { a.delete(); } catch(e) {} });
+    }
+    const app = firebase.initializeApp({
+      apiKey: 'paymind-health',
+      databaseURL: FIREBASE_URL,
+      projectId: 'paymind-b1d51'
+    });
+    firebaseDB = firebase.database(app);
+    return true;
+  } catch (e) {
+    console.error('[weight] Firebase init error', e);
+    firebaseDB = null;
+    return false;
+  }
+}
+
+async function loadFromFirebase() {
+  if (!firebaseDB || !fbUser) return false;
+  try {
+    const snap = await firebaseDB.ref(`/health/${fbUser}`).once('value');
+    const data = snap.val();
+    if (!data) return false; // no data for this user yet
+    if (data.weightData && typeof data.weightData === 'object') {
+      weightData = Object.values(data.weightData).filter(d => d && d.date);
+    }
+    if (data.journalData && typeof data.journalData === 'object') {
+      journalData = Object.values(data.journalData).filter(j => j && j.date);
+    }
+    return true;
+  } catch (e) {
+    console.error('[weight] Firebase load error', e);
+    return false;
+  }
+}
+
+function syncToFirebase() {
+  if (!firebaseDB || !fbUser || fbSyncing) return;
+  fbSyncing = true;
+  // Key weight entries by date + optional time; Firebase disallows dots and colons
+  const weightObj = {};
+  weightData.forEach(d => {
+    const key = d.time ? `${d.date}_${d.time.replace(':','')}_${d.time.replace(':','')}` : d.date;
+    weightObj[key] = d;
+  });
+  // Key journal entries by date
+  const journalObj = {};
+  journalData.forEach(j => { journalObj[j.date] = j; });
+  firebaseDB.ref(`/health/${fbUser}`).update({ weightData: weightObj, journalData: journalObj })
+    .then(() => {
+      fbSyncing = false;
+      updateSyncBadge('☁ Synced', 'var(--accent)');
+    })
+    .catch(e => {
+      fbSyncing = false;
+      console.error('[weight] Sync error', e);
+      updateSyncBadge('⚠ Sync failed', 'var(--accent3)');
+    });
+}
+
+function updateSyncBadge(msg, color) {
+  const el = document.getElementById('syncBadge');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = color || 'var(--accent)';
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 3000);
+}
+
+function openUserModal() {
+  document.getElementById('userInput').value = fbUser;
+  document.getElementById('userModalMsg').textContent = fbUser ? `Currently signed in as: ${fbUser}` : '';
+  document.getElementById('userModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('userInput').focus(), 100);
+}
+
+function closeUserModal() {
+  document.getElementById('userModal').style.display = 'none';
+}
+
+async function setUser() {
+  const raw = document.getElementById('userInput').value.trim();
+  // Sanitise: lowercase, letters/digits/dash/underscore only
+  const val = raw.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  if (!val) {
+    document.getElementById('userModalMsg').textContent = '⚠ Username must contain letters or numbers.';
+    return;
+  }
+  fbUser = val;
+  localStorage.setItem('weightUser', fbUser);
+  updateSyncBadge('Connecting…', 'var(--muted)');
+  document.getElementById('userModalMsg').textContent = 'Connecting…';
+
+  if (!initFirebase()) {
+    document.getElementById('userModalMsg').textContent = '⚠ Firebase unavailable — working offline.';
+    updateSyncBadge('Offline', 'var(--accent3)');
+    closeUserModal();
+    updateUserDisplay();
+    return;
+  }
+
+  const loaded = await loadFromFirebase();
+  if (loaded) {
+    // Firebase had data — use it as source of truth
+    renderStats(); renderTable(); renderChart(); renderJournal(); renderOMAD(); updateGoals(); renderReset();
+    await persistAll(); // mirror to localStorage
+    document.getElementById('userModalMsg').textContent = `✓ Loaded ${weightData.length} weight entries from cloud.`;
+    updateSyncBadge('☁ Loaded', 'var(--accent)');
+  } else {
+    // New user — push local data up
+    syncToFirebase();
+    document.getElementById('userModalMsg').textContent = `New user created. Local data synced to cloud.`;
+  }
+  updateUserDisplay();
+  setTimeout(closeUserModal, 1800);
+}
+
+function clearUser() {
+  fbUser = '';
+  firebaseDB = null;
+  localStorage.removeItem('weightUser');
+  updateUserDisplay();
+  document.getElementById('userModalMsg').textContent = 'Signed out. Working from local storage only.';
+  setTimeout(closeUserModal, 1500);
+}
+
+function updateUserDisplay() {
+  const lbl = document.getElementById('userLabel');
+  if (lbl) lbl.textContent = fbUser || 'Guest';
+}
+
+// ═══════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════
 async function init() {
   await loadPersisted();
+  // Reconnect to Firebase if user was previously signed in
+  if (fbUser && initFirebase()) {
+    const loaded = await loadFromFirebase();
+    if (loaded) {
+      await persistAll(); // mirror Firebase data to localStorage silently
+    }
+    updateSyncBadge('☁ Connected', 'var(--accent)');
+  }
+  updateUserDisplay();
   renderStats();
   renderTable();
   renderChart();
