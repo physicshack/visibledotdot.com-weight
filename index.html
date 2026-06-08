@@ -1218,6 +1218,7 @@ const omadFoods = [
 // STATE
 // ═══════════════════════════════════════
 let currentUnit = 'st';
+let trueStartKg = null; // user-defined starting weight for Total Lost calculation
 let sortDir = -1;
 let chartInstance = null;
 let chartRangeStart = 0, chartRangeEnd = 100;
@@ -1457,7 +1458,8 @@ function renderStats() {
 
   const latBmi = bmi(latest.kg);
   const {label, cls} = bmiStatus(latBmi);
-  const totalLost = oldest.kg - latest.kg;
+  const startKg = trueStartKg !== null ? trueStartKg : oldest.kg;
+  const totalLost = startKg - latest.kg;
   const change = prev ? latest.kg - prev.kg : 0;
 
   // Weekly rate is computed by renderChart from the visible slice — placeholder updated there
@@ -1481,9 +1483,9 @@ function renderStats() {
       <div class="stat-sub">${change < 0 ? '↓ ' : change > 0 ? '↑ ' : ''}${Math.abs(change * 2.20462).toFixed(1)} lb</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Total Lost</div>
+      <div class="stat-label">Total Lost <button onclick="editTrueStart()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:0 2px;" title="Set true start weight">✎</button></div>
       <div class="stat-value stat-good">${totalLost.toFixed(1)} kg</div>
-      <div class="stat-sub">${fmtStone(oldest.kg)} → ${fmtStone(latest.kg)}</div>
+      <div class="stat-sub" id="totalLostSub">${fmtStone(startKg)} → ${fmtStone(latest.kg)}${trueStartKg !== null ? ' ★' : ''}</div>
     </div>
     <div class="stat-card" id="weeklyRateCard">
       <div class="stat-label">Weekly Rate (trend)</div>
@@ -1525,6 +1527,16 @@ function renderStats() {
 // ═══════════════════════════════════════
 // GOALS
 // ═══════════════════════════════════════
+function editTrueStart() {
+  const current = trueStartKg !== null ? trueStartKg : '';
+  const val = prompt(`True start weight (kg) — used for Total Lost.\nLeave blank to use your first recorded entry.`, current);
+  if (val === null) return; // cancelled
+  const kg = parseFloat(val);
+  trueStartKg = (!val.trim() || isNaN(kg)) ? null : kg;
+  persistAll();
+  renderStats();
+}
+
 function resetGoalStart() {
   const sorted = [...weightData].sort((a,b) => b.date.localeCompare(a.date));
   if (!sorted.length) return;
@@ -2314,7 +2326,8 @@ function currentBackup() {
     weightData,
     journalData,
     omadFoods,
-    mealQtys
+    mealQtys,
+    trueStartKg
   };
 }
 
@@ -2328,6 +2341,7 @@ function applyLoadedData(data) {
   }
   Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
   if (data.mealQtys && typeof data.mealQtys === 'object') Object.assign(mealQtys, data.mealQtys);
+  trueStartKg = (typeof data.trueStartKg === 'number') ? data.trueStartKg : null;
   return true;
 }
 
