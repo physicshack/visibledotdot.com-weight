@@ -2437,12 +2437,41 @@ async function loadFromFirebase() {
   try {
     const snap = await firebaseDB.ref(`/health/${fbUser}`).once('value');
     const data = snap.val();
-    if (!data) return false; // no data for this user yet
+    if (!data) return false;
     if (data.weightData && typeof data.weightData === 'object') {
       weightData = Object.values(data.weightData).filter(d => d && d.date);
     }
     if (data.journalData && typeof data.journalData === 'object') {
       journalData = Object.values(data.journalData).filter(j => j && j.date);
+    }
+    if (data.omadFoods && typeof data.omadFoods === 'object') {
+      const foods = Object.values(data.omadFoods).filter(Boolean);
+      if (foods.length) { omadFoods.length = 0; foods.forEach(f => omadFoods.push(f)); }
+    }
+    if (data.prefs) {
+      const p = data.prefs;
+      if (p.currentUnit) currentUnit = p.currentUnit;
+      if (typeof p.chartRangeStart === 'number') chartRangeStart = p.chartRangeStart;
+      if (typeof p.chartRangeEnd === 'number') chartRangeEnd = p.chartRangeEnd;
+      if (typeof p.trueStartKg === 'number') trueStartKg = p.trueStartKg;
+      else trueStartKg = null;
+      if (p.mealQtys) {
+        try {
+          const mq = JSON.parse(p.mealQtys);
+          Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
+          Object.assign(mealQtys, mq);
+        } catch(e) {}
+      }
+      // Restore goal inputs after DOM is ready
+      if (p.goalStart || p.goalTarget) {
+        setTimeout(() => {
+          const gs = document.getElementById('goalStart');
+          const gt = document.getElementById('goalTarget');
+          if (gs && !gs.value && p.goalStart) gs.value = p.goalStart;
+          if (gt && !gt.value && p.goalTarget) gt.value = p.goalTarget;
+          updateGoals();
+        }, 200);
+      }
     }
     return true;
   } catch (e) {
@@ -2454,16 +2483,29 @@ async function loadFromFirebase() {
 function syncToFirebase() {
   if (!firebaseDB || !fbUser || fbSyncing) return;
   fbSyncing = true;
-  // Key weight entries by date + optional time; Firebase disallows dots and colons
+  // Arrays must be keyed objects in Firebase (no arrays allowed)
   const weightObj = {};
   weightData.forEach(d => {
-    const key = d.time ? `${d.date}_${d.time.replace(':','')}_${d.time.replace(':','')}` : d.date;
+    const key = d.time ? `${d.date}_${d.time.replace(':','')}` : d.date;
     weightObj[key] = d;
   });
-  // Key journal entries by date
   const journalObj = {};
   journalData.forEach(j => { journalObj[j.date] = j; });
-  firebaseDB.ref(`/health/${fbUser}`).update({ weightData: weightObj, journalData: journalObj })
+  const omadObj = {};
+  omadFoods.forEach((f, i) => { omadObj[`f${String(i).padStart(4,'0')}`] = f; });
+  // Preferences — goals read from DOM
+  const goalStartEl = document.getElementById('goalStart');
+  const goalTargetEl = document.getElementById('goalTarget');
+  const prefs = {
+    currentUnit,
+    chartRangeStart,
+    chartRangeEnd,
+    trueStartKg: trueStartKg !== null ? trueStartKg : null,
+    goalStart: goalStartEl ? goalStartEl.value : null,
+    goalTarget: goalTargetEl ? goalTargetEl.value : null,
+    mealQtys: JSON.stringify(mealQtys),
+  };
+  firebaseDB.ref(`/health/${fbUser}`).set({ weightData: weightObj, journalData: journalObj, omadFoods: omadObj, prefs })
     .then(() => {
       fbSyncing = false;
       updateSyncBadge('☁ Synced', 'var(--accent)');
