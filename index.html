@@ -1600,7 +1600,7 @@ function renderChart() {
   const ei = Math.min(n - 1, Math.floor(chartRangeEnd / 100 * (n - 1)));
   const slice = sorted.slice(si, ei + 1);
 
-  document.getElementById('rangeDates').textContent = `${slice[0]?.date} → ${slice[slice.length-1]?.date}`;
+  document.getElementById('rangeDates').textContent = `${slice[0]?.date} → ${slice[slice.length-1]?.date}`; // updated below if future extended
 
   const toVal = kg => unit === 'kg' ? kg : kg * 2.20462 / 14;
 
@@ -1619,8 +1619,6 @@ function renderChart() {
   // Two-point straight trend: only need start and end values
   const trendStart = interceptIdx;
   const trendEnd = interceptIdx + slopeIdx * (m - 1);
-  const trend = [trendStart, trendEnd];
-  const trendLabels = [new Date(labels[0]).getTime(), new Date(labels[m - 1]).getTime()];
 
   // Weekly rate: slope of the same regression but in kg/week using real day span
   // slopeIdx is in display-units per index. Convert back to kg per index, then scale by real days.
@@ -1629,6 +1627,29 @@ function renderChart() {
   const daysPerIdx = m > 1 ? totalDays / (m - 1) : 1;
   const kgPerWeek = daysPerIdx > 0 ? kgPerIdx / daysPerIdx * 7 : 0;
   const weeklyRate = -kgPerWeek; // positive = losing weight
+
+  // Extend chart into the future when end slider is at max and a goal is projected
+  const goalTargetKg = parseFloat(document.getElementById('goalTarget').value);
+  const goalStartKg = parseFloat(document.getElementById('goalStart').value);
+  let projectedEndMs = null; // future x-axis max (ms timestamp)
+  let trendFutureY = trendEnd;
+  if (chartRangeEnd >= 98 && weeklyRate > 0.005 && !isNaN(goalTargetKg) && !isNaN(goalStartKg) && goalStartKg > goalTargetKg) {
+    const weeksNeeded = (goalStartKg - goalTargetKg) / weeklyRate;
+    const goalDate = new Date();
+    goalDate.setDate(goalDate.getDate() + Math.round(weeksNeeded * 7) + 7); // goal date + 7 days
+    if (goalDate.getTime() > new Date(labels[m - 1]).getTime()) {
+      projectedEndMs = goalDate.getTime();
+      trendFutureY = toVal(goalTargetKg); // trend terminates at goal weight
+    }
+  }
+  const trend = [trendStart, projectedEndMs ? trendFutureY : trendEnd];
+  const trendLabels = [new Date(labels[0]).getTime(), projectedEndMs || new Date(labels[m - 1]).getTime()];
+
+  // Update range display — show future end date when extended
+  if (projectedEndMs) {
+    const futureStr = new Date(projectedEndMs).toISOString().split('T')[0];
+    document.getElementById('rangeDates').textContent = `${slice[0]?.date} → ${futureStr} (projected)`;
+  }
 
   // Push rate to stat card
   const rateEl = document.getElementById('weeklyRateVal');
@@ -1660,15 +1681,17 @@ function renderChart() {
   const targetVal = !isNaN(targetKg) ? toVal(targetKg) : null;
   const yMin = targetVal !== null ? Math.min(dataMin, targetVal) * 0.995 : undefined;
 
-  // Goal line dataset
+  // Goal line dataset — extends to future end if projected
+  const goalLineEnd = projectedEndMs || new Date(labels[m - 1]).getTime();
   const goalDataset = targetVal !== null ? [{
     label: 'Goal',
-    data: labels.map(() => targetVal),
+    data: [{x: new Date(labels[0]).getTime(), y: targetVal}, {x: goalLineEnd, y: targetVal}],
     borderColor: '#818cf8',
     borderWidth: 1.5,
     borderDash: [3, 5],
     pointRadius: 0,
     tension: 0,
+    parsing: false,
   }] : [];
 
   if (chartInstance) chartInstance.destroy();
@@ -1723,6 +1746,7 @@ function renderChart() {
             tooltipFormat: 'yyyy-MM-dd',
             displayFormats: { day: 'dd MMM', month: 'MMM yy', year: 'yyyy' }
           },
+          max: projectedEndMs || undefined,
           ticks: { color: '#7a7f9a', maxTicksLimit: 10, font: { size: 10 }, maxRotation: 0 },
           grid: { color: 'rgba(46,50,72,0.5)' }
         },
