@@ -1,0 +1,2360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weight Tracker V3</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3248;
+    --accent: #6ee7b7;
+    --accent2: #f59e0b;
+    --accent3: #f87171;
+    --text: #e8eaf0;
+    --muted: #7a7f9a;
+    --card-bg: #161929;
+    --goal: #818cf8;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    color: var(--accent);
+    padding: 14px 0;
+    white-space: nowrap;
+  }
+
+  nav { display: flex; gap: 2px; }
+
+  nav button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  nav button.active, nav button:hover { background: var(--surface2); color: var(--text); }
+  nav button.active { color: var(--accent); }
+
+  .page { display: none; padding: 24px; max-width: 1400px; margin: 0 auto; }
+  .page.active { display: block; }
+
+  /* ─── CARDS ─── */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+  }
+
+  .card-header {
+    font-family: 'DM Serif Display', serif;
+    font-size: 16px;
+    color: var(--accent);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* ─── STATS ROW ─── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+
+  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .stat-value { font-size: 22px; font-weight: 600; color: var(--text); }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .stat-good { color: var(--accent); }
+  .stat-warn { color: var(--accent2); }
+  .stat-bad { color: var(--accent3); }
+
+  /* ─── UNITS TOGGLE ─── */
+  .unit-toggle {
+    display: inline-flex;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .unit-toggle button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    padding: 5px 14px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+  .unit-toggle button.active {
+    background: var(--accent);
+    color: #000;
+  }
+
+  /* ─── CHART ─── */
+  .chart-container {
+    position: relative;
+    height: 300px;
+    margin: 12px 0;
+  }
+
+  canvas { width: 100% !important; }
+
+  .range-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .range-group { flex: 1; min-width: 160px; }
+  .range-group label { font-size: 11px; color: var(--muted); display: block; margin-bottom: 4px; }
+  .range-group input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .range-dates { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+
+  /* ─── BMI GAUGE ─── */
+  .bmi-bar {
+    height: 12px;
+    border-radius: 6px;
+    /* Scale: 15–40 BMI (25 unit range)
+       Underweight <18.5 → ends at (18.5-15)/25 = 14%
+       Healthy 18.5–25  → ends at (25-15)/25   = 40%
+       Overweight 25–30 → ends at (30-15)/25   = 60%
+       Obese 30+        → remainder             */
+    background: linear-gradient(to right,
+      #60a5fa 0%, #60a5fa 14%,
+      #6ee7b7 14%, #6ee7b7 40%,
+      #fbbf24 40%, #fbbf24 60%,
+      #f87171 60%, #f87171 100%);
+    position: relative;
+    margin: 8px 0;
+  }
+  .bmi-needle {
+    position: absolute;
+    top: -4px;
+    width: 4px;
+    height: 20px;
+    background: white;
+    border-radius: 2px;
+    transform: translateX(-50%);
+    transition: left 0.6s ease;
+    box-shadow: 0 0 6px rgba(255,255,255,0.5);
+  }
+  .bmi-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* ─── GOAL SLIDERS ─── */
+  .goal-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  .goal-input {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .goal-input label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+
+  /* ─── FORM INPUTS ─── */
+  input[type=text], input[type=date], input[type=number], textarea, select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 8px 12px;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 80px; }
+
+  /* ─── WEIGHT ENTRY ─── */
+  .entry-row {
+    display: grid;
+    grid-template-columns: 160px 1fr 1fr 1fr 100px;
+    gap: 10px;
+    align-items: end;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 18px;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn-ghost {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .btn-danger { background: var(--accent3); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+  /* ─── DATA TABLE ─── */
+  .data-table-wrapper { max-height: 360px; overflow-y: auto; border-radius: 10px; border: 1px solid var(--border); }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead { position: sticky; top: 0; background: var(--surface2); z-index: 2; }
+  th { padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; white-space: nowrap; }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  .sort-btn { cursor: pointer; user-select: none; }
+  .sort-btn:hover { color: var(--accent); }
+
+  /* ─── JOURNAL ─── */
+  .journal-list { display: flex; flex-direction: column; gap: 10px; max-height: 500px; overflow-y: auto; }
+
+  .journal-entry {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .journal-entry:hover { border-color: var(--accent); }
+  .journal-entry.has-weight { border-left: 3px solid var(--accent); }
+
+  .journal-entry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .journal-date { font-size: 12px; color: var(--muted); }
+  .journal-day { font-weight: 600; font-size: 13px; }
+  .journal-weight-badge {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .journal-text { font-size: 13px; color: var(--text); line-height: 1.5; }
+  .journal-notes { font-size: 11px; color: var(--muted); margin-top: 4px; font-style: italic; }
+
+  .journal-form {
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+
+  .journal-form-grid {
+    display: grid;
+    grid-template-columns: 160px 100px 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: end;
+  }
+
+  /* ─── RESET DASHBOARD ─── */
+  .reset-hero {
+    display: grid;
+    grid-template-columns: 1.25fr 0.75fr;
+    gap: 18px;
+    align-items: stretch;
+    margin-bottom: 18px;
+  }
+
+  .phase-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  .phase-step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    min-height: 92px;
+    opacity: 0.72;
+  }
+
+  .phase-step.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px rgba(110,231,183,0.18);
+    opacity: 1;
+  }
+
+  .phase-step.done {
+    border-color: rgba(110,231,183,0.35);
+    opacity: 0.9;
+  }
+
+  .phase-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .phase-meta {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.35;
+  }
+
+  .milestone-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+  }
+
+  .win-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 340px;
+    overflow-y: auto;
+  }
+
+  .win-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+
+  .checkin-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(90px, 1fr));
+    gap: 10px;
+    margin: 10px 0;
+  }
+
+  .checkin-grid label {
+    font-size: 11px;
+    color: var(--muted);
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .toggle-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .toggle-row label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 12px;
+    color: var(--text);
+  }
+
+  /* ─── OMAD ─── */
+  .omad-layout {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 20px;
+    align-items: start;
+  }
+
+  .food-category {
+    margin-bottom: 12px;
+  }
+
+  .category-header {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 6px 0;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .food-item {
+    display: grid;
+    grid-template-columns: 1fr 140px 60px 60px;
+    gap: 8px;
+    align-items: center;
+    padding: 7px 8px;
+    border-radius: 7px;
+    transition: background 0.15s;
+  }
+  .food-item:hover { background: var(--surface2); }
+
+  .food-name { font-size: 13px; }
+  .food-meta { font-size: 11px; color: var(--muted); }
+  .food-cals { font-size: 13px; color: var(--accent2); text-align: right; }
+
+  .food-qty {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 4px 8px;
+    width: 60px;
+    text-align: center;
+    outline: none;
+  }
+  .food-qty:focus { border-color: var(--accent); }
+
+  .meal-totals {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    position: sticky;
+    top: 80px;
+  }
+
+  .total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .total-row:last-child { border-bottom: none; }
+  .total-label { font-size: 12px; color: var(--muted); }
+  .total-value { font-size: 16px; font-weight: 600; }
+
+  .calorie-gauge {
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 8px 0;
+  }
+  .calorie-fill {
+    height: 100%;
+    background: linear-gradient(to right, var(--accent), var(--accent2));
+    border-radius: 4px;
+    transition: width 0.4s ease;
+  }
+
+  .target-cals { font-size: 11px; color: var(--muted); text-align: center; margin-top: 4px; }
+
+  /* ─── LAYOUT HELPERS ─── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .space-between { justify-content: space-between; }
+  .mt-12 { margin-top: 12px; }
+  .mt-16 { margin-top: 16px; }
+  .mb-16 { margin-bottom: 16px; }
+
+  .tag {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-size: 11px;
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .trend-up { color: var(--accent3); }
+  .trend-down { color: var(--accent); }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .pill-green { background: rgba(110,231,183,0.15); color: var(--accent); }
+  .pill-amber { background: rgba(245,158,11,0.15); color: var(--accent2); }
+  .pill-red { background: rgba(248,113,113,0.15); color: var(--accent3); }
+  .pill-blue { background: rgba(129,140,248,0.15); color: var(--goal); }
+
+  .delete-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: color 0.2s;
+  }
+  .delete-btn:hover { color: var(--accent3); }
+
+  @media (max-width: 768px) {
+    header { flex-wrap: wrap; gap: 10px; padding-bottom: 10px; }
+    nav { order: 3; width: 100%; overflow-x: auto; }
+    .reset-hero { grid-template-columns: 1fr; }
+    .phase-strip { grid-template-columns: 1fr 1fr; }
+    .checkin-grid { grid-template-columns: 1fr 1fr; }
+    .omad-layout { grid-template-columns: 1fr; }
+    .entry-row { grid-template-columns: 1fr 1fr; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .goal-section { grid-template-columns: 1fr; }
+    .journal-form-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">⚖ WeightTracker V3</div>
+  <nav>
+    <button class="active" onclick="showPage('reset')">Reset</button>
+    <button onclick="showPage('tracker')">📈 Tracker</button>
+    <button onclick="showPage('journal')">📓 Journal</button>
+    <button onclick="showPage('omad')">🍽 OMAD Tool</button>
+  </nav>
+  <div style="margin-left:auto; display:flex; align-items:center; gap:10px;">
+    <span id="saveIndicator" style="font-size:12px; color:var(--accent); opacity:0; transition:opacity 0.4s;">✓ Saved</span>
+    <button class="btn btn-ghost btn-sm" onclick="exportJSON()" title="Export all data as JSON backup">⬇ Export</button>
+    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importFile').click()" title="Import JSON backup">⬆ Import</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
+    <div class="unit-toggle">
+      <button class="active" onclick="setUnit('st')">St/Lb</button>
+      <button onclick="setUnit('kg')">KG</button>
+    </div>
+  </div>
+</header>
+
+<!-- Import confirmation modal -->
+<div id="importModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:300; align-items:center; justify-content:center;">
+  <div style="background:var(--surface); border:1px solid var(--accent); border-radius:16px; padding:24px; max-width:480px; width:90%; margin:0 24px;">
+    <div style="font-family:'DM Serif Display',serif; font-size:16px; color:var(--accent); margin-bottom:12px;">⬆ Import Backup</div>
+    <div id="importModalMsg" style="font-size:13px; color:var(--text); margin-bottom:20px; line-height:1.6;"></div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn btn-sm" style="background:var(--accent3);" onclick="applyImport('replace')">Replace All</button>
+      <button class="btn btn-sm" onclick="applyImport('merge')">Merge</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importModal').style.display='none'">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     PAGE 1: TRACKER
+══════════════════════════════════ -->
+<div class="page active" id="page-reset">
+  <div class="reset-hero">
+    <div class="card">
+      <div class="card-header">Reset Dashboard</div>
+      <div id="resetHero"></div>
+      <div class="phase-strip" id="phaseStrip"></div>
+    </div>
+    <div class="card">
+      <div class="card-header">Latest Signal</div>
+      <div id="latestSignal"></div>
+    </div>
+  </div>
+
+  <div class="grid-2 mb-16">
+    <div class="card">
+      <div class="card-header">Next Milestones</div>
+      <div class="milestone-grid" id="milestoneGrid"></div>
+    </div>
+    <div class="card">
+      <div class="card-header">State Check</div>
+      <div id="stateCheck"></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header">Quick Wins</div>
+      <div class="win-list" id="quickWins"></div>
+    </div>
+    <div class="card">
+      <div class="card-header">Today</div>
+      <div id="todayPrompt"></div>
+    </div>
+  </div>
+</div>
+
+<div class="page" id="page-tracker">
+
+  <!-- Stats row -->
+  <div class="stats-grid" id="statsGrid"></div>
+
+  <!-- BMI + Goals -->
+  <div class="grid-2 mb-16">
+    <div class="card">
+      <div class="card-header">📊 BMI Monitor</div>
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+        <span id="bmiValue" style="font-size:28px; font-weight:700; font-family:'DM Serif Display',serif;"></span>
+        <span id="bmiStatus" class="pill pill-amber"></span>
+      </div>
+      <div class="bmi-bar">
+        <div class="bmi-needle" id="bmiNeedle"></div>
+      </div>
+      <div class="bmi-labels">
+        <span>Under 18.5</span><span>18.5–24.9</span><span>25–29.9</span><span>30+</span>
+      </div>
+      <div class="mt-12" style="font-size:12px; color:var(--muted);">
+        Height: <span id="heightDisplay" style="color:var(--text); font-weight:500;"></span>
+        &nbsp;·&nbsp; At goal BMI 24.9: <span id="bmiGoalWeight" style="color:var(--accent); font-weight:500;"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">🎯 Goals</div>
+      <div class="goal-section">
+        <div class="goal-input">
+          <label>Start Weight (for projection)</label>
+          <input type="number" id="goalStart" step="0.1" placeholder="kg" oninput="updateGoals()">
+        </div>
+        <div class="goal-input">
+          <label>Target Weight</label>
+          <input type="number" id="goalTarget" step="0.1" placeholder="kg" oninput="updateGoals()">
+        </div>
+      </div>
+      <div id="goalOutput" class="mt-12" style="font-size:13px; color:var(--muted);"></div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="card mb-16">
+    <div class="card-header row space-between">
+      <span>📉 Weight Over Time</span>
+      <div class="row" style="gap:8px;">
+        <select id="chartUnit" onchange="renderChart()" style="width:auto; padding:4px 10px;">
+          <option value="stone">Stone</option>
+          <option value="kg">KG</option>
+        </select>
+      </div>
+    </div>
+    <div class="chart-container">
+      <canvas id="weightChart"></canvas>
+    </div>
+    <div class="range-controls">
+      <div class="range-group" style="flex:2;">
+        <label>Start Date</label>
+        <input type="range" id="rangeStart" min="0" max="100" value="0" oninput="updateChartRange()">
+      </div>
+      <div class="range-group" style="flex:2;">
+        <label>End Date</label>
+        <input type="range" id="rangeEnd" min="0" max="100" value="100" oninput="updateChartRange()">
+      </div>
+      <div id="rangeDates" class="range-dates" style="font-size:12px; color:var(--muted); min-width:200px; text-align:right;"></div>
+    </div>
+  </div>
+
+  <!-- Add Entry -->
+  <div class="card mb-16">
+    <div class="card-header">➕ Add / Edit Entry</div>
+    <div class="entry-row" id="entryRow">
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Date</label>
+        <input type="date" id="entryDate">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Stone</label>
+        <input type="number" id="entryStone" min="0" max="30" placeholder="e.g. 13" oninput="syncEntryFromSt()">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Lbs (0–13)</label>
+        <input type="number" id="entryLbs" min="0" max="13" placeholder="0–13" oninput="syncEntryFromSt()">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">KG</label>
+        <input type="number" id="entryKg" step="0.1" placeholder="e.g. 88.5" oninput="syncEntryFromKg()">
+      </div>
+      <button class="btn" onclick="saveEntry()">Save</button>
+    </div>
+    <div id="entryMsg" style="font-size:12px; color:var(--accent); height:16px;"></div>
+  </div>
+
+  <!-- Data Table -->
+  <div class="card">
+    <div class="card-header row space-between">
+      <span>📋 All Records</span>
+      <div class="row" style="gap:8px;">
+        <input type="text" id="tableSearch" placeholder="Search dates…" style="width:160px; padding:5px 10px;" oninput="renderTable()">
+        <button class="btn btn-ghost btn-sm" onclick="exportCSV()">Export CSV</button>
+      </div>
+    </div>
+    <div class="data-table-wrapper">
+      <table id="dataTable">
+        <thead>
+          <tr>
+            <th class="sort-btn" onclick="sortTable('date')">Date ↕</th>
+            <th>Stone</th>
+            <th>Lbs</th>
+            <th>KG</th>
+            <th>BMI</th>
+            <th>Change</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     PAGE 2: JOURNAL
+══════════════════════════════════ -->
+<div class="page" id="page-journal">
+
+  <div class="journal-form">
+    <div class="card-header">✍ New Journal Entry</div>
+    <div class="journal-form-grid">
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Date</label>
+        <input type="date" id="jDate">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Weight (kg, optional)</label>
+        <input type="number" id="jWeight" step="0.1" placeholder="kg">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Notes / tags</label>
+        <input type="text" id="jNotes" placeholder="e.g. post-walk, fasted…">
+      </div>
+    </div>
+    <div>
+      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Entry</label>
+      <textarea id="jComment" placeholder="How did today go? What did you eat? Any observations?"></textarea>
+    </div>
+    <div class="checkin-grid">
+      <div>
+        <label>Hunger</label>
+        <input type="number" id="jHunger" min="1" max="5" placeholder="1-5">
+      </div>
+      <div>
+        <label>Food noise</label>
+        <input type="number" id="jFoodNoise" min="1" max="5" placeholder="1-5">
+      </div>
+      <div>
+        <label>Energy</label>
+        <input type="number" id="jEnergy" min="1" max="5" placeholder="1-5">
+      </div>
+      <div>
+        <label>Focus</label>
+        <input type="number" id="jFocus" min="1" max="5" placeholder="1-5">
+      </div>
+      <div>
+        <label>Sleep</label>
+        <input type="number" id="jSleep" min="1" max="5" placeholder="1-5">
+      </div>
+      <div>
+        <label>Win tag</label>
+        <input type="text" id="jWinTag" placeholder="e.g. reflux gone">
+      </div>
+    </div>
+    <div class="toggle-row">
+      <label><input type="checkbox" id="jOmadKept"> OMAD kept</label>
+      <label><input type="checkbox" id="jAlcohol"> Alcohol</label>
+      <label><input type="checkbox" id="jExercise"> Exercise / walk</label>
+      <label><input type="checkbox" id="jQuickWin"> Quick win</label>
+    </div>
+    <div class="row mt-12">
+      <button class="btn" onclick="saveJournal()">Save Entry</button>
+      <button class="btn btn-ghost" onclick="clearJournalForm()">Clear</button>
+      <span id="jMsg" style="font-size:12px; color:var(--accent);"></span>
+    </div>
+  </div>
+
+  <div class="row space-between mb-16">
+    <div style="font-size:13px; color:var(--muted);" id="journalCount"></div>
+    <input type="text" id="jSearch" placeholder="Search entries…" style="width:200px; padding:5px 10px;" oninput="renderJournal()">
+  </div>
+
+  <div class="journal-list" id="journalList"></div>
+</div>
+
+<!-- ══════════════════════════════════
+     PAGE 3: OMAD TOOL
+══════════════════════════════════ -->
+<div class="page" id="page-omad">
+
+  <!-- FOOD EDITOR MODAL -->
+  <div id="foodEditorModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:200; overflow-y:auto; padding:24px;">
+    <div style="max-width:700px; margin:0 auto; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:24px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+        <div class="card-header" style="margin-bottom:0;">✏️ Edit Food Database</div>
+        <button class="btn btn-ghost btn-sm" onclick="closeFoodEditor()">✕ Close</button>
+      </div>
+
+      <!-- Add new food -->
+      <div style="background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:18px;">
+        <div style="font-size:12px; color:var(--muted); margin-bottom:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.07em;">Add New Food</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Category</label>
+            <input type="text" id="newFoodCat" list="catSuggestions" placeholder="e.g. SEAFOOD">
+            <datalist id="catSuggestions"></datalist>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Food Name</label>
+            <input type="text" id="newFoodName" placeholder="e.g. Tuna Steak">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Serving Size</label>
+            <input type="text" id="newFoodServing" placeholder="e.g. 200g">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Calories</label>
+            <input type="number" id="newFoodCals" placeholder="0" min="0">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Protein (g)</label>
+            <input type="number" id="newFoodProtein" placeholder="0" min="0" step="0.1">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Fat (g)</label>
+            <input type="number" id="newFoodFat" placeholder="0" min="0" step="0.1">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Carbs (g)</label>
+            <input type="number" id="newFoodCarbs" placeholder="0" min="0" step="0.1">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Fibre (g)</label>
+            <input type="number" id="newFoodFibre" placeholder="0" min="0" step="0.1">
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn btn-sm" onclick="addFoodItem()">Add Food</button>
+          <span id="foodEditorMsg" style="font-size:12px; color:var(--accent);"></span>
+        </div>
+      </div>
+
+      <!-- Existing foods list -->
+      <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">Existing foods — click a row to edit, ✕ to delete</div>
+      <div style="max-height:400px; overflow-y:auto; border:1px solid var(--border); border-radius:10px;">
+        <table style="width:100%; border-collapse:collapse;" id="foodEditorTable">
+          <thead style="position:sticky;top:0;background:var(--surface2);">
+            <tr>
+              <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;">Category</th>
+              <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;">Name</th>
+              <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;">Serving</th>
+              <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;">Cal</th>
+              <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;">P</th>
+              <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;">F</th>
+              <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;">C</th>
+              <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;">Fi</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="foodEditorBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="omad-layout">
+    <div>
+      <div class="card-header" style="margin-bottom:16px;">
+        🍽 OMAD Meal Builder
+        <div style="margin-left:auto; display:flex; gap:8px;">
+          <button class="btn btn-ghost btn-sm" onclick="openFoodEditor()">✏️ Edit Foods</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearMeal()">Clear All</button>
+        </div>
+      </div>
+      <div id="omadFoodList"></div>
+    </div>
+
+    <div class="meal-totals">
+      <div class="card-header">Today's Meal</div>
+
+      <div style="margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline;">
+          <span style="font-size:12px; color:var(--muted);">Calories</span>
+          <span id="totCals" style="font-size:32px; font-weight:700; font-family:'DM Serif Display',serif; color:var(--accent2);">0</span>
+        </div>
+        <div class="calorie-gauge"><div class="calorie-fill" id="calGauge" style="width:0%"></div></div>
+        <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--muted);">
+          <span>0</span>
+          <span>Target: <input type="number" id="calTarget" value="1500" style="width:60px; padding:2px 6px; font-size:11px; background:var(--surface2); border:1px solid var(--border); border-radius:4px; color:var(--text);" oninput="updateTotals()"></span>
+          <span id="calTargetLabel">1500</span>
+        </div>
+      </div>
+
+      <div class="total-row">
+        <span class="total-label">Protein</span>
+        <span class="total-value" id="totProtein" style="color:#60a5fa;">0 g</span>
+      </div>
+      <div class="total-row">
+        <span class="total-label">Fat</span>
+        <span class="total-value" id="totFat" style="color:#f59e0b;">0 g</span>
+      </div>
+      <div class="total-row">
+        <span class="total-label">Carbs</span>
+        <span class="total-value" id="totCarbs" style="color:#a78bfa;">0 g</span>
+      </div>
+      <div class="total-row">
+        <span class="total-label">Fibre</span>
+        <span class="total-value" id="totFibre" style="color:#6ee7b7;">0 g</span>
+      </div>
+
+      <div class="mt-12" id="omadSummary"></div>
+
+      <button class="btn mt-12" style="width:100%;" onclick="logMealToJournal()">📓 Log to Journal</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// ═══════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════
+
+const HEIGHT_FT = 5, HEIGHT_IN = 8;
+const HEIGHT_M = ((HEIGHT_FT * 12) + HEIGHT_IN) * 0.0254;
+
+// Weight data from workbook (sorted newest first)
+let weightData = [
+  {date:'2026-04-27',stone:13,lbs:12,frac:0.32,kg:88.138},
+  {date:'2026-04-24',stone:14,lbs:1,frac:0,kg:89.354},
+  {date:'2026-04-21',stone:14,lbs:2,frac:0.24,kg:89.916},
+  {date:'2026-04-20',stone:14,lbs:2,frac:0.66,kg:90.107},
+  {date:'2026-04-16',stone:14,lbs:4,frac:0.25,kg:90.828},
+  {date:'2026-04-09',stone:14,lbs:6,frac:0.25,kg:91.735},
+  {date:'2026-04-07',stone:14,lbs:9,frac:0.25,kg:93.096},
+  {date:'2026-04-03',stone:14,lbs:7,frac:0.5,kg:92.302},
+  {date:'2026-04-01',stone:14,lbs:8,frac:0.25,kg:92.642},
+  {date:'2026-03-31',stone:14,lbs:8,frac:0.25,kg:92.642},
+  {date:'2026-03-30',stone:14,lbs:11,frac:0.25,kg:94.003},
+  {date:'2026-03-28',stone:14,lbs:6,frac:0.5,kg:91.848},
+  {date:'2026-03-20',stone:14,lbs:13,frac:0.75,kg:95.137},
+  {date:'2026-03-17',stone:15,lbs:0,frac:0.75,kg:95.590},
+  {date:'2026-03-13',stone:15,lbs:2,frac:0,kg:96.157},
+  {date:'2026-03-12',stone:15,lbs:6,frac:0,kg:97.971},
+  {date:'2026-02-11',stone:16,lbs:9,frac:0,kg:105.682},
+  {date:'2013-11-26',stone:14,lbs:3,frac:0,kg:90.261},
+  {date:'2008-09-19',stone:12,lbs:11,frac:0.5,kg:81.416},
+  {date:'2008-09-11',stone:12,lbs:11,frac:0.25,kg:81.303},
+  {date:'2008-09-05',stone:13,lbs:2,frac:0.5,kg:83.684},
+  {date:'2008-09-04',stone:13,lbs:2,frac:0.25,kg:83.571},
+  {date:'2008-09-03',stone:13,lbs:1,frac:0.75,kg:83.344},
+  {date:'2008-09-02',stone:13,lbs:2,frac:0.75,kg:83.797},
+  {date:'2008-09-01',stone:13,lbs:4,frac:0,kg:84.364},
+  {date:'2008-08-30',stone:13,lbs:2,frac:0.5,kg:83.684},
+  {date:'2008-08-27',stone:13,lbs:5,frac:0.25,kg:84.931},
+  {date:'2008-08-26',stone:13,lbs:5,frac:0.5,kg:85.045},
+  {date:'2008-08-25',stone:13,lbs:8,frac:0.5,kg:86.405},
+  {date:'2008-08-23',stone:13,lbs:6,frac:0.25,kg:85.385},
+  {date:'2008-08-22',stone:13,lbs:7,frac:0.5,kg:85.952},
+  {date:'2008-08-21',stone:13,lbs:8,frac:0.5,kg:86.405},
+  {date:'2008-08-20',stone:13,lbs:9,frac:0.5,kg:86.859},
+  {date:'2008-08-18',stone:13,lbs:11,frac:0.75,kg:87.879},
+  {date:'2008-08-09',stone:13,lbs:11,frac:0.25,kg:87.653},
+  {date:'2008-08-08',stone:13,lbs:12,frac:0,kg:87.993},
+  {date:'2008-08-07',stone:13,lbs:12,frac:0.75,kg:88.333},
+  {date:'2008-08-06',stone:13,lbs:13,frac:0.75,kg:88.787},
+  {date:'2008-08-05',stone:14,lbs:2,frac:0.5,kg:90.034},
+  {date:'2008-08-03',stone:14,lbs:7,frac:0.5,kg:92.302},
+  {date:'2008-01-21',stone:14,lbs:0,frac:0,kg:88.9},
+  {date:'2008-01-01',stone:15,lbs:0,frac:0,kg:95.25},
+];
+
+// Journal data from workbook
+let journalData = [
+  {date:'2026-02-11',day:'Wed',comment:'Before start. Have visited US for 2 separate weeks and just returned from Germany. Feel bloated, more so when I eat. No clothes fit, pressure in head when bending down, feels like there is unsufficient space for organs. Tickly cough present for months. Severe acid reflux every night. Have lost weight and gotten fit many times over the years. Nearly a 2 or 3 year cycle, Not sure if at 47 I may be too old to create the discapline requried now???',weight:104,lost:0,notes:'16st 5.28lbs'},
+  {date:'2026-02-12',day:'Thu',comment:'First day fasting',weight:null,lost:0,notes:''},
+  {date:'2026-02-13',day:'Fri',comment:'Second day fasting, feel less bloated',weight:null,lost:0,notes:''},
+  {date:'2026-02-14',day:'Sat',comment:'Third day fasting, less bloated, less acid',weight:null,lost:0,notes:''},
+  {date:'2026-02-15',day:'Sun',comment:'Start one meal per day',weight:null,lost:0,notes:''},
+  {date:'2026-02-16',day:'Mon',comment:'Continue',weight:null,lost:0,notes:''},
+  {date:'2026-02-17',day:'Tue',comment:'Belt is not digging in, not in pain',weight:null,lost:0,notes:''},
+  {date:'2026-02-18',day:'Wed',comment:'Continue',weight:null,lost:0,notes:''},
+  {date:'2026-02-19',day:'Thu',comment:'Continue - Becoming used to being hungry from the morning. Do not wake up feeling full or bloated.',weight:null,lost:0,notes:''},
+  {date:'2026-02-20',day:'Fri',comment:'Continue',weight:null,lost:0,notes:''},
+  {date:'2026-02-21',day:'Sat',comment:'Continue',weight:null,lost:0,notes:''},
+  {date:'2026-02-22',day:'Sun',comment:'Belt starting to feel loose but not ready for next belt loop',weight:null,lost:0,notes:''},
+  {date:'2026-02-23',day:'Mon',comment:'Continue',weight:null,lost:0,notes:''},
+  {date:'2026-02-24',day:'Tue',comment:'Blood pressure from high to mid of pre-high',weight:null,lost:0,notes:''},
+  {date:'2026-02-25',day:'Wed',comment:'30 pressups',weight:null,lost:0,notes:''},
+  {date:'2026-02-26',day:'Thu',comment:'Feel less inclined to drink coffee. Have had tea through the day',weight:null,lost:0,notes:''},
+  {date:'2026-02-27',day:'Fri',comment:'Belt changed to lower loop',weight:null,lost:0,notes:''},
+  {date:'2026-02-28',day:'Sat',comment:'Can bend down to tie shoes no problem. Crazy that this change occurs in 2 weeks. Definitely not to old!! Acid reflux gone, Cough also gone, must have been acid burning throat/windpipe!!!',weight:null,lost:0,notes:''},
+  {date:'2026-03-01',day:'Sun',comment:'Blood pressure lower end of pre-high',weight:null,lost:0,notes:''},
+  {date:'2026-03-02',day:'Mon',comment:'Feel less inclined to drink coffee / beer. Have had tea through the day',weight:null,lost:0,notes:''},
+  {date:'2026-03-03',day:'Tue',comment:'Belt feels loose again but not ready for next notch',weight:null,lost:0,notes:''},
+  {date:'2026-03-04',day:'Wed',comment:'Nearly on to Large clothes from XL ',weight:null,lost:0,notes:''},
+  {date:'2026-03-05',day:'Thu',comment:'First mention to looking different. DF in the morning',weight:null,lost:0,notes:''},
+  {date:'2026-03-06',day:'Fri',comment:'Was able to wear older 34" jeans today. Not tight, also wore Jack Wills Jumper. More clothes becoming available. ',weight:null,lost:0,notes:''},
+  {date:'2026-03-07',day:'Sat',comment:'Continue',weight:null,lost:0,notes:''},
+  {date:'2026-03-08',day:'Sun',comment:'Continue - Snoring less',weight:null,lost:0,notes:''},
+  {date:'2026-03-09',day:'Mon',comment:'Continue',weight:null,lost:0,notes:''},
+  {date:'2026-03-10',day:'Tue',comment:'Wore Richmod Polo top L not XL.',weight:null,lost:0,notes:''},
+  {date:'2026-03-11',day:'Wed',comment:'Continue',weight:null,lost:0,notes:''},
+  {date:'2026-03-12',day:'Thu',comment:'Cicken breast with broth and some TomYm. Garlic and plenty of Veg. 2 bread rolls. ',weight:98,lost:6.0,notes:''},
+  {date:'2026-03-13',day:'Fri',comment:'Continue',weight:96.3,lost:7.7,notes:''},
+  {date:'2026-03-14',day:'Sat',comment:'Pack of cooked salmon, pack of large prawns, pack of beef slices two rolls. V filling',weight:null,lost:7.7,notes:''},
+  {date:'2026-03-15',day:'Sun',comment:'Out with Daisy and Adam, did not feel bloated or self concious - Wings and Jacket potatoe before Alex James BritPop - Blurr gig',weight:null,lost:7.7,notes:''},
+  {date:'2026-03-16',day:'Mon',comment:'1 chicken breast, broth, lots of veg and garlic and chilli.Little annoying same weight  - Happy stable and still trending overoall. ',weight:96.3,lost:7.7,notes:''},
+  {date:'2026-03-17',day:'Tue',comment:'Noticed less 3am wake ups, more towards 5am. 1.5 chicken breasts, TomTum with Haddock, muchrooms, brocolli 1/2 Onion, Half baked wholemeal baguette. Getting close to second belt loop drop - Feels much better. ',weight:95.5,lost:8.5,notes:''},
+  {date:'2026-03-18',day:'Wed',comment:'Woke up at 5am. Scrolled on my phone for over 2 hours, just got to work on time.Belt feels better, less overhang. Energy levels much better than before. 30 pressups not hard now. 1.5 chicken breast, 1 bagguett fish chowder with added fish, and veg',weight:null,lost:8.5,notes:''},
+  {date:'2026-03-19',day:'Thu',comment:'Woke 4:45. Phone was not charged. No scrolling. I just got up. Had a cup of tea and fed Socky. Then took her for a walk, saw the sunrise and a baby seal!!! Seems Phone is bad influence. No alc helps mornings also. Focus on good sleep, no phone, no alc. Could make a big difference. Monitor!!!! 350g fillet steak, shared with Daisy. One grilled large checken breast, 2 large muchrooms, broccoli, collyflower carrots.',weight:null,lost:8.5,notes:''},
+  {date:'2026-03-20',day:'Fri',comment:'Woke up at 4:45 am again today after going to be at 23:00. No alarm. Did not pick up phone and had a shower neary straight away. I have just notice that my desk is much tider than usual. Pens all put away and PC windows less cluttered. Very interesting to observe these changes. Under 15 stone today! Not much, 14.98, but I will take it. :)',weight:94.9,lost:9.1,notes:''},
+  {date:'2026-03-21',day:'Sat',comment:'',weight:null,lost:9.1,notes:''},
+  {date:'2026-03-22',day:'Sun',comment:'',weight:null,lost:9.1,notes:''},
+  {date:'2026-03-23',day:'Mon',comment:'Got keys for 3 Sussex Cottages today. Filled first load in van. Visited with Daisy and Georgie, who picked the front bedroom with fire place.',weight:null,lost:9.1,notes:''},
+  {date:'2026-03-24',day:'Tue',comment:'Second (last) day with van today. Rush to get the big stuff moved. Georiges friends came over to help. Was a lot of work. There is no way I could have done this 1 month ago before losing weight. We drove to collect the fridge today. Crazy heavy. Jack came over to help move things. Made a big difference. ',weight:null,lost:9.1,notes:''},
+  {date:'2026-03-25',day:'Wed',comment:'Took van back. Ian came over later to help move the fridge. Got it in, had to take doors off. Had used lifting strap around neck, very awkward and painful. Later put strap over shoulder and MUCH easier.',weight:null,lost:9.1,notes:''},
+  {date:'2026-03-26',day:'Thu',comment:'',weight:null,lost:9.1,notes:''},
+  {date:'2026-03-27',day:'Fri',comment:'',weight:null,lost:9.1,notes:''},
+  {date:'2026-03-28',day:'Sat',comment:'2 chicken breasts, with chicken soup added broccoli, onions and muchrooms. Got water and ice working in fride. Lots of driving today. Tilly to Newhaven, then home, then Georgie to her mums. Weighed in today at 91.9kg afternoon at work when collecting some bits. Seems very low will review if an error.',weight:91.9,lost:12.1,notes:'Large loss could be due to house move and lack of hydration?'},
+  {date:'2026-03-29',day:'Sun',comment:'Very tired after move, sorted though old photos and took dog for 3 mile walk. Eat large TomYum soup, 2 cod fillets, 1 chicken breast, lots of veg, and seafood mix including prawns, squid and muscles. 1 brown bake baguet. Daisy able to sleep if I fall asleep first due to improved snoring. Still snoring but volume significantly less. I can not remember the last time I woke up gasping for air, or with acid reflux.',weight:null,lost:12.1,notes:''},
+  {date:'2026-03-30',day:'Mon',comment:'Back to work. Woke up later due to being tired but still was not rushed getting to work and had plenty of time to get ready. Out of bed by 07:00. Ate, 2 chicken breasts with chorizo and chicken soup. ',weight:94,lost:10.0,notes:''},
+  {date:'2026-03-31',day:'Tue',comment:'1/2 soup for dinner with Daisy. 2 chicken breast, veg and also half a chorizo. We had red wine with dinner. Fell asleep on the sofa.',weight:92.7,lost:11.3,notes:''},
+  {date:'2026-04-01',day:'Wed',comment:'Too much wine last night. Feel slow today. Wore Jellyfish grey sports top for the first time. Had to piecies of salmon. Lots of veg and bread roll. ',weight:null,lost:11.3,notes:''},
+  {date:'2026-04-02',day:'Thu',comment:'Woke up at 6am. Work on time. Weighed in at exacty the same as 2 days ago. Strange as should be <1.5k cals per day. Monitor. Dinner, out for Indian on Thursday to celebrate the long weekend. Had fish masala and plain rice. Also had a popadoms for starter. ',weight:92.7,lost:11.3,notes:''},
+  {date:'2026-04-03',day:'Fri',comment:'Woke up at 5am this morning but chose to stay in bed. Work Daisy up at 7am without alarm. Feeling better, but Daisy mentioned snoring was worse last night and that made some gurgling sounds. Had Indian food the night before, which was mild, and 3 beers. ',weight:92.3,lost:11.7,notes:'0.2294117647058824'},
+  {date:'2026-04-04',day:'Sat',comment:'Had 2 chicken breasts, half a chorizo, and 2 poached eggs in soup with a lot of veg including Broccoli, mushrooms, 1/2 and oniion, and 2 self baked brown seeded rolls',weight:null,lost:11.7,notes:''},
+  {date:'2026-04-05',day:'Sun',comment:'Had Daisy\'s dad and Na over for Easter dinner, was very nice. Had Lamb, roast potatoes and lots of Veg, there was also Triffle, Chease cake, and chocolate cheese cake, had a bit of each. Georgie, Martha and Harry were there too which was nice.  Felt pretty full, but dinner was about 16:00 and by the time i went to bed did not feel bloated and did not snore too heavily.',weight:null,lost:11.7,notes:''},
+  {date:'2026-04-06',day:'Mon',comment:'Picked up Arm chair from brighton and did a tip run today. Ate 2 chiecken breasts and soup with a slice of bread and a flat bread. Not too filling as did not have a lot of veg. ',weight:null,lost:11.7,notes:''},
+  {date:'2026-04-07',day:'Tue',comment:'Easily up at 6am today. Have not scrolled in the morning since the day my phone battery was flat. Makes a bid difference. weighted in heavier this morning than on Friday despite mostly eathing cleanly (except Sunday) and being active with dog walks and a gym session on Thursday. Could be due to beer and wine consupmption over the long weekend? Ate well, had two custs of cooked salmon, tray of large prawns and a packet of sliced beef with two seeded brown bread crusty rolls. Probably 1200 to 1500 cals total. at home had wine and then had a period of grazing on sweets. I have noticed that if I think of food, acknowleddge and then move on the compulsion to eat does not surface however if I allow coninued thought of food (as this evening) I will eventually find it hard to resist. Seems there is a mind trick I can apply here. ',weight:93.1,lost:10.9,notes:'14.661417322834646'},
+  {date:'2026-04-08',day:'Wed',comment:'Felt groggy in the morning and lethargic, unclear. Decided to start a 48 hour fast from last night as a mini reset and to prevent formation of bad habits. No food today. Got home took Socky the dog for a long walk over the fields in the late afternoon sun. Felt much better by the evening already. Got to bed before 10pm.',weight:92.7,lost:11.3,notes:''},
+  {date:'2026-04-09',day:'Thu',comment:'Woke up early, got up. Feel much clearer today. Belt is now too loose on second to last hole but snug on last hole. Have used the full belt range on the Ben Sherman Belt. Will remain fasted until this evening. Plan to eat Tom Yum with one chicken breast, vegetables and one bread roll. Need to get a lot down at work today, as traveling to Ireland next week to deliver training on the new pump to commercial team. ',weight:91.7,lost:12.3,notes:'14.45 Stone'},
+  {date:'2026-04-10',day:'Fri',comment:'',weight:null,lost:12.3,notes:''},
+  {date:'2026-04-11',day:'Sat',comment:'',weight:null,lost:12.3,notes:''},
+  {date:'2026-04-12',day:'Sun',comment:'Obtained ADHD medication today and took for the first time. Had an ache in my back and felt energised but not a big effect. Hard to assess as busy day and had to travel to Ireland. Dinner was at the Aer Lingus lounge in Heathrow and was Chicken curry, rice and 3 1/4 cut sandwitches with stilton and crackers. Estimate 1200 cals. Arrived at the hotel around 21:00',weight:null,lost:12.3,notes:''},
+  {date:'2026-04-13',day:'Mon',comment:'Up at 4:45am. Ache in back again after taking medication. Ger took me in at 8:20. Spent long day trouble shooting the first GSK unit, but got it in good shape. Dinner was Salmon at the hotel with mushroom soup for starters. Had 2 beers and 2 whiskey sours.  Training the team went well. Pump built and run. Testing and trouble shooting tomorrow.',weight:null,lost:12.3,notes:''},
+  {date:'2026-04-14',day:'Tue',comment:'Up early for training. No ache in back today. Training went well. Assembled the pump parts and got to run one one of the pumps with the team. Dinner was prawns start and pan baked hake with mash. Est. 1400 cals. 1 beer, 1 whiskey sour',weight:null,lost:12.3,notes:''},
+  {date:'2026-04-15',day:'Wed',comment:'Second day training went well. Lots to fix on pump that made trouble shooting a hands on experience. 10 Oz sirloin for dinner with rice and broccoli. 2 glasses of red wine, margeritta and a beer at the hotel.',weight:null,lost:12.3,notes:''},
+  {date:'2026-04-16',day:'Thu',comment:'Got up at 4:30am, left the hotel at 5:20. Drove to work from heathrow and have been working ok since. Tomorrow will be the first normal day since ADHD meds, will be interesting to see what impact they have. Feel that getting up earlier naturally is still working well. Ate 2 salmon fillets, chicken soup with veg and muchrooms added, large flat bread. estimate 1200 cals. Reflecting on medication it has been hard to know if it has a big impact besides feeling more alert. Work has been intense sine the weekend with early starts and late dinners/drinks. Feel it may have had an impact but the urgency of the events would also typically have the same effect.',weight:90.8,lost:13.2,notes:'14.3 Stone'},
+  {date:'2026-04-17',day:'Fri',comment:'Noasis gig with Adam. Didn’t feel tired at all while out. Home be about 23:00. Dinner was an Italian pizza on the beach pereroni, Est. 2000 cals.',weight:90.8,lost:13.2,notes:''},
+  {date:'2026-04-18',day:'Sat',comment:'Woke up, but stayed in bed. Tired after previous week training in Ireland and Noasis gig I think. Took meds at 11am. Tidied room (before took effect), Did 2 lots of laundry and the washing up. Dinner was Fish TomYum, 2 fillets of white frozen fish, 1 fillet of salmon, TomYum soup from paste and water, brocolli, cauliflour, 3 mushrooms, packet of large prawns, self backed wholemeale baggette, Est 1200 cals. Felt tired when sitting on the sofa in the evening. Too Georgie to drive around the car park in the mini. She did very well!! later went to the Star to see Jack and Mija with Daisy. Nice afternoon.',weight:null,lost:13.2,notes:''},
+  {date:'2026-04-19',day:'Sun',comment:'Car boot sale today. Work up at 4:25, just before my 4:30 alarm. Took meds around 5am. Boot sale went well, raised around £250 from old junk. Dinner was Chicken Soup, 2 chicken breasts, carton of soup, 3 mushrooms, peppers, garlic and 1/3 of a chorizo saussage. Cals est >1000. Also had 1 beer at lunch with Daisy, and 1 while mowing the lawn. Did not feel tired until sitting on the sofa in the evening.',weight:null,lost:13.2,notes:''},
+  {date:'2026-04-20',day:'Mon',comment:'Woke up at 4:30, at work for 7:30 am. Work was fragmented but I think this was needed. Interuptions in the morning on pump test impacted time to prepare commercial updates and Beta plan. Ian figured out that we had some software issues when we last updated the system, and once corrected we saw results in line with DAPR that needed to be explored and showed great progress especially on low flow and low pressure which while could be improved with a potential gain, had never run stably before with our current degassing algorythm. Left the office at 18:30 and had dinner around 7:45. Felt very tired after settling. Not sure if the tireness hits once I have settled, or if it hits due to the time. I feel like if I am active I remain alert. Need to dig in to this. Ate Chicken soup with 2 chicken breasts, one poached egg and 1/3 chorizo saussage, 3 mushrooms 2 red onion, half a garlic and 1 self bake baggeutte. Est. 1600 cals',weight:90.1,lost:13.9,notes:'14.19 Stone'},
+  {date:'2026-04-21',day:'Tue',comment:'Woke up at 4:30, at work for 7:00. Feel a little hungrier than usual for this time in the morning which is unusual. ',weight:89.9,lost:14.1,notes:'14.16 Stone'},
+  {date:'2026-04-22',day:'Wed',comment:'Steak for dinner, ate half the chips, est 1000 cals',weight:null,lost:14.1,notes:''},
+  {date:'2026-04-23',day:'Thu',comment:'Woke up at 4:30 am. 3:30 UK time. Worked on emails and prepared for GSK comissioning. Went very well but lots of learnings. Fahra was able to comission the second pump herself. This is massive. Would have been unthinkable just 6 months ago before the auto priming and degassing features. At 2 fish currys at the airport loungh on the way home. 2 glasses of wine. Estimate 1500 cals all in.',weight:null,lost:14.1,notes:''},
+  {date:'2026-04-24',day:'Fri',comment:'Not Obese today! Big step. Woke up at 5am before alarm. Got to work at 10am. Took some time in the mornig after gtting home late. Had 2 chicken breasts with soup and lots of veg. Hollow wholemeal bagguette. Estimate 1500 cals',weight:89.3,lost:14.7,notes:'14.07 Stone'},
+  {date:'2026-04-25',day:'Sat',comment:'Had a nice day. Up at 7 tried on clothes that have been storage box for > 2 years. Can fit in to some Medium clothes now, some medium too tight. Some significantly too tight. For the ones that are just too tight I estimate I can wear them in 2 to 4 weeks from now. Georgie had a BBQ which was nice to see her have her friends around. I saw Dave G for coffee in the day time. First time in a while. Good to see him. Will do this more often. Went to dinner with Daist to the Indain in Herstmonxeu. Had a poppadom with chilla lamb masala and pilau rice est 1500 cals',weight:null,lost:14.7,notes:''},
+  {date:'2026-04-26',day:'Sun',comment:'Got up at 6am, ADHD meds increased to 40mg today, I did not notice an effect. Drove to southampton for Tillys championship. Had a great time she did really well and won a gold and 2 silver medals. Drove home and took Georgie for a driving lesson (first on the road with me) at 18:30. She did really well, and really improved her clutch control! We stopped and she had some McDonalds to give her some time to assimilate her learning. Very good lesson. Ate, 400g of pork fillet with 300ml of gravy with a large carrot, 1/2 an onion, brocolli and 1 hollow wholemean baguette. ',weight:null,lost:14.7,notes:''},
+  {date:'2026-04-27',day:'Mon',comment:'Up at 5:45 am. Drove MX5 as Daisy was worried the gear selector was not working. Seems fine. Have been working with Claud and GPT to standardise a learning and document workflow. Am pretty excited about its potential impact. Below 14 stone today. (13st 12.32 lbs - 88.1 kg) seems like a large drop in a few days. Maybe hydration, but will keep an eye on variations over the coming days.  Noticed a more energised feeling while looking at report and documentation workflows today. Related to ADHD meds rise to 40mg I think Will keep an eye on this. Have noticed more tired at night when activity stops, but stay alert fine if activity goes late. Still waking up far better in the morning. Highly suspect sleep apnea was a high factor in tiredness, snoring remains greatly reduced and feel sleep must be far better quality given the ease of mornings now. ',weight:88.1,lost:15.9,notes:'13.88 Stone'},
+  {date:'2026-04-28',day:'Tue',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-04-29',day:'Wed',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-04-30',day:'Thu',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-01',day:'Fri',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-02',day:'Sat',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-03',day:'Sun',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-04',day:'Mon',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-05',day:'Tue',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-06',day:'Wed',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-07',day:'Thu',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-08',day:'Fri',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-09',day:'Sat',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-10',day:'Sun',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-11',day:'Mon',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-12',day:'Tue',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-13',day:'Wed',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-14',day:'Thu',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-15',day:'Fri',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-16',day:'Sat',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-17',day:'Sun',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-18',day:'Mon',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-19',day:'Tue',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-20',day:'Wed',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-21',day:'Thu',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-22',day:'Fri',comment:'',weight:null,lost:15.9,notes:''},
+  {date:'2026-05-23',day:'Sat',comment:'',weight:null,lost:15.9,notes:''},
+];
+
+// OMAD food data - corrected column mapping: Type, Name, Serving, Cals, Protein, Fat, Carbs, Fibre
+const omadFoods = [
+  {cat:'POULTRY & MEATS',name:'Chicken Breast (Med)',serving:'150g',cals:165,protein:35,fat:2,carbs:0,fibre:0},
+  {cat:'POULTRY & MEATS',name:'Sirloin Steak (Trimmed)',serving:'10oz / 284g',cals:350,protein:60,fat:12,carbs:0,fibre:0},
+  {cat:'POULTRY & MEATS',name:'Sirloin Steak (Fat On)',serving:'10oz / 284g',cals:580,protein:58,fat:38,carbs:0,fibre:0},
+  {cat:'POULTRY & MEATS',name:'Fillet Steak',serving:'8oz / 227g',cals:310,protein:52,fat:11,carbs:0,fibre:0},
+  {cat:'POULTRY & MEATS',name:'Pork Chop (Trimmed)',serving:'150g',cals:210,protein:33,fat:8,carbs:0,fibre:0},
+  {cat:'POULTRY & MEATS',name:'Pork Chop (Fat On)',serving:'150g',cals:290,protein:30,fat:18,carbs:0,fibre:0},
+  {cat:'POULTRY & MEATS',name:'Pork Fillet (Tenderloin)',serving:'200g',cals:240,protein:52,fat:4,carbs:0,fibre:0},
+  {cat:'POULTRY & MEATS',name:'Lamb Chop (Trimmed)',serving:'75g',cals:160,protein:18,fat:10,carbs:0,fibre:0},
+  {cat:'POULTRY & MEATS',name:'Lamb Chop (Fat On)',serving:'75g',cals:230,protein:16,fat:18,carbs:0,fibre:0},
+  {cat:'INDIAN',name:'Poppadom',serving:'1 each',cals:45,protein:2,fat:2,carbs:6,fibre:0},
+  {cat:'INDIAN',name:'Lamb Masala',serving:'300g',cals:600,protein:35,fat:30,carbs:20,fibre:0},
+  {cat:'INDIAN',name:'Pilau Rice',serving:'250g',cals:350,protein:5,fat:8,carbs:50,fibre:0},
+  {cat:'INDIAN',name:'Naan Bread',serving:'175g',cals:600,protein:16,fat:15,carbs:105,fibre:5},
+  {cat:'SEAFOOD',name:'Haddock/Cod Fillet',serving:'200g (Large)',cals:160,protein:36,fat:1,carbs:0,fibre:0},
+  {cat:'SEAFOOD',name:'Salmon Fillet',serving:'130g (1 pack)',cals:270,protein:28,fat:17,carbs:0,fibre:0},
+  {cat:'SEAFOOD',name:'King Prawns',serving:'150g (Tray)',cals:145,protein:34,fat:1,carbs:1,fibre:0},
+  {cat:'SOUP & BASES',name:'NC Garden Chicken Soup',serving:'560g (Full)',cals:286,protein:13,fat:11,carbs:32,fibre:4},
+  {cat:'SOUP & BASES',name:'Gravy - Beef Bisto',serving:'300ml',cals:84,protein:3,fat:3,carbs:16,fibre:3},
+  {cat:'SOUP & BASES',name:'Tom Yum (Tin)',serving:'400g (Full)',cals:110,protein:2,fat:6,carbs:12,fibre:1},
+  {cat:'SOUP & BASES',name:'Tom Yum (Paste/Water)',serving:'2 tbsp paste',cals:70,protein:1,fat:4,carbs:8,fibre:1},
+  {cat:'CARBS & EXTRAS',name:'Multiseed Baguette',serving:'125g (Full)',cals:326,protein:12,fat:5,carbs:56,fibre:4},
+  {cat:'CARBS & EXTRAS',name:'Hollowed Multiseed Baguette',serving:'Crust Only',cals:180,protein:6,fat:3,carbs:32,fibre:2},
+  {cat:'CARBS & EXTRAS',name:'Jacket Potato',serving:'250g (Large)',cals:230,protein:5,fat:0.5,carbs:53,fibre:6},
+  {cat:'CARBS & EXTRAS',name:'Basmati Rice',serving:'180g (Cooked)',cals:220,protein:4.5,fat:0.5,carbs:48,fibre:1},
+  {cat:'CARBS & EXTRAS',name:'Poached Egg',serving:'1 Large',cals:75,protein:6.5,fat:5,carbs:0.5,fibre:0},
+  {cat:'CARBS & EXTRAS',name:'Chorizo Sausage',serving:'50g',cals:230,protein:12,fat:19,carbs:1,fibre:0},
+  {cat:'VEGETABLE FILLERS',name:'Broccoli / Cauliflower',serving:'200g',cals:68,protein:6,fat:1,carbs:10,fibre:6},
+  {cat:'VEGETABLE FILLERS',name:'Cabbage (Shredded)',serving:'200g',cals:50,protein:3,fat:0.5,carbs:10,fibre:5},
+  {cat:'VEGETABLE FILLERS',name:'Large Carrot',serving:'80g',cals:30,protein:1,fat:0.2,carbs:7,fibre:2},
+  {cat:'VEGETABLE FILLERS',name:'Peppers (Red/Yellow)',serving:'200g',cals:60,protein:2,fat:0.5,carbs:12,fibre:4},
+  {cat:'VEGETABLE FILLERS',name:'Onions/Mushrooms',serving:'Mix (200g)',cals:85,protein:4,fat:0.5,carbs:16,fibre:4},
+  {cat:'ALCOHOL',name:'Beer / Lager',serving:'570ml (1pt)',cals:240,protein:0,fat:0,carbs:18,fibre:0},
+  {cat:'ALCOHOL',name:'IPA',serving:'570ml (1pt)',cals:300,protein:0,fat:0,carbs:22,fibre:0},
+  {cat:'ALCOHOL',name:'Pinot Grigio',serving:'250ml (large)',cals:200,protein:0,fat:0,carbs:6,fibre:0},
+  {cat:'ALCOHOL',name:'Merlot',serving:'250ml (large)',cals:215,protein:0,fat:0,carbs:8,fibre:0},
+  {cat:'ALCOHOL',name:'Gin & Slimline Tonic',serving:'Large double',cals:110,protein:0,fat:0,carbs:0,fibre:0},
+  {cat:'ALCOHOL',name:'Gin & Tonic',serving:'Large double',cals:200,protein:0,fat:0,carbs:20,fibre:0},
+];
+
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+let currentUnit = 'st';
+let sortDir = -1;
+let chartInstance = null;
+let chartRangeStart = 0, chartRangeEnd = 100;
+const STORAGE_KEY = 'weightTrackerData';
+
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+}
+
+const PHASES = [
+  {id:'fast', name:'Initial Fast', start:'2026-02-12', end:'2026-02-14', note:'Shock state change: break the bloated/full loop.'},
+  {id:'omad-reset', name:'OMAD Reset', start:'2026-02-15', end:'2026-03-11', note:'One clear eating decision per day; hunger pattern resets.'},
+  {id:'active-loss', name:'Active Loss', start:'2026-03-12', end:null, note:'Track trend, quick wins, sleep, focus, and adherence.'},
+  {id:'maintenance', name:'Maintenance Range', start:null, end:null, note:'Future mode: hold a weight range and raise calories carefully.'}
+];
+
+const WIN_KEYWORDS = [
+  'acid', 'reflux', 'cough', 'snoring', 'sleep', 'belt', 'clothes', 'jeans',
+  'xl', 'large', 'medium', 'morning', 'energy', 'focus', 'pressups',
+  'bloated', 'walk', 'obese', 'not obese', 'coffee', 'beer'
+];
+
+// ═══════════════════════════════════════
+// UNIT HELPERS
+// ═══════════════════════════════════════
+function kgToStLbs(kg) {
+  const totalLbs = kg * 2.20462;
+  const stone = Math.floor(totalLbs / 14);
+  const lbs = totalLbs % 14;
+  return {stone, lbs};
+}
+
+function stLbsToKg(stone, lbs) {
+  return (stone * 14 + lbs) * 0.453592;
+}
+
+function fmtWeight(kg, unit) {
+  if (unit === 'kg') return kg.toFixed(1) + ' kg';
+  const {stone, lbs} = kgToStLbs(kg);
+  return `${stone}st ${lbs.toFixed(1)}lb`;
+}
+
+function fmtStone(kg) {
+  const {stone, lbs} = kgToStLbs(kg);
+  return `${stone}st ${lbs.toFixed(1)}lb`;
+}
+
+function bmi(kg) { return kg / (HEIGHT_M * HEIGHT_M); }
+
+function bmiStatus(b) {
+  if (b < 18.5) return {label:'Underweight', cls:'pill-blue'};
+  if (b < 25) return {label:'Healthy', cls:'pill-green'};
+  if (b < 30) return {label:'Overweight', cls:'pill-amber'};
+  return {label:'Obese', cls:'pill-red'};
+}
+
+// ═══════════════════════════════════════
+// PAGE NAV
+// ═══════════════════════════════════════
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  const evt = typeof event !== 'undefined' ? event : null;
+  const navBtn = evt?.target?.closest?.('nav button') || document.querySelector(`nav button[onclick="showPage('${id}')"]`);
+  if (navBtn) navBtn.classList.add('active');
+  if (id === 'reset') renderReset();
+}
+
+function setUnit(u) {
+  currentUnit = u;
+  document.querySelectorAll('.unit-toggle button').forEach(b => b.classList.remove('active'));
+  const evt = typeof event !== 'undefined' ? event : null;
+  if (evt?.target) evt.target.classList.add('active');
+  document.getElementById('chartUnit').value = u === 'kg' ? 'kg' : 'stone';
+  renderStats();
+  renderTable();
+  renderChart();
+  renderReset();
+}
+
+// ═══════════════════════════════════════
+// TREND HELPER — kg/week from regression on real dates
+// ═══════════════════════════════════════
+function trendKgPerWeek(sortedAsc) {
+  const n = sortedAsc.length;
+  if (n < 2) return 0;
+  const t0 = new Date(sortedAsc[0].date).getTime();
+  const xs = sortedAsc.map(d => (new Date(d.date).getTime() - t0) / 86400000);
+  const ys = sortedAsc.map(d => d.kg);
+  const xMean = xs.reduce((a,b) => a+b, 0) / n;
+  const yMean = ys.reduce((a,b) => a+b, 0) / n;
+  let num = 0, den = 0;
+  for (let i = 0; i < n; i++) { num += (xs[i]-xMean)*(ys[i]-yMean); den += (xs[i]-xMean)**2; }
+  return den ? (num/den) * 7 : 0; // kg/week, negative = losing
+}
+
+function parseDay(dateStr) {
+  return new Date(dateStr + 'T00:00:00');
+}
+
+function daysBetween(start, end) {
+  return Math.round((parseDay(end) - parseDay(start)) / 86400000);
+}
+
+function latestWeightRecord() {
+  return [...weightData].sort((a,b) => b.date.localeCompare(a.date))[0] || null;
+}
+
+function firstWeightSince(date) {
+  return [...weightData].sort((a,b) => a.date.localeCompare(b.date)).find(w => w.date >= date) || null;
+}
+
+function activePhase(latestDate) {
+  return PHASES.find(p => p.start && latestDate >= p.start && (!p.end || latestDate <= p.end)) || PHASES[2];
+}
+
+function journalHasQuickWin(j) {
+  const text = `${j.comment || ''} ${j.notes || ''} ${j.checkin?.winTag || ''}`.toLowerCase();
+  return !!j.checkin?.quickWin || WIN_KEYWORDS.some(k => text.includes(k));
+}
+
+function shortText(text, max = 150) {
+  const clean = String(text || '').replace(/\s+/g, ' ').trim();
+  return clean.length > max ? clean.slice(0, max - 1) + '...' : clean;
+}
+
+function phaseStatus(phase, latestDate) {
+  if (!phase.start) return 'future';
+  if (phase.end && latestDate > phase.end) return 'done';
+  if (latestDate >= phase.start && (!phase.end || latestDate <= phase.end)) return 'active';
+  return 'future';
+}
+
+function renderReset() {
+  const latest = latestWeightRecord();
+  if (!latest || !document.getElementById('resetHero')) return;
+  const first2026 = firstWeightSince('2026-01-01') || latest;
+  const startDate = PHASES[0].start;
+  const currentPhase = activePhase(latest.date);
+  const resetDay = Math.max(1, daysBetween(startDate, latest.date) + 1);
+  const totalLoss = first2026.kg - latest.kg;
+  const targetKg = parseFloat(document.getElementById('goalTarget')?.value) || 74;
+  const toTarget = Math.max(0, latest.kg - targetKg);
+  const b = bmi(latest.kg);
+  const status = bmiStatus(b);
+
+  document.getElementById('resetHero').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;">
+      <div><div class="stat-label">Reset Day</div><div class="stat-value">${resetDay}</div><div class="stat-sub">Started ${startDate}</div></div>
+      <div><div class="stat-label">Current Phase</div><div class="stat-value" style="color:var(--accent);">${esc(currentPhase.name)}</div><div class="stat-sub">${esc(currentPhase.note)}</div></div>
+      <div><div class="stat-label">Total Lost</div><div class="stat-value stat-good">${totalLoss.toFixed(1)} kg</div><div class="stat-sub">${fmtWeight(latest.kg, currentUnit)} now</div></div>
+      <div><div class="stat-label">Target Gap</div><div class="stat-value">${toTarget.toFixed(1)} kg</div><div class="stat-sub">Target ${targetKg.toFixed(1)} kg</div></div>
+    </div>`;
+
+  document.getElementById('phaseStrip').innerHTML = PHASES.map(p => {
+    const st = phaseStatus(p, latest.date);
+    const dateLabel = p.start ? `${p.start}${p.end ? ' to ' + p.end : '+'}` : 'future';
+    return `<div class="phase-step ${st}">
+      <div class="phase-name">${st === 'done' ? '✓ ' : st === 'active' ? '● ' : ''}${esc(p.name)}</div>
+      <div class="phase-meta">${esc(dateLabel)}<br>${esc(p.note)}</div>
+    </div>`;
+  }).join('');
+
+  const latestJournal = [...journalData].sort((a,b) => b.date.localeCompare(a.date)).find(j => (j.comment || '').trim() || j.checkin);
+  const latestWin = [...journalData].sort((a,b) => b.date.localeCompare(a.date)).find(journalHasQuickWin);
+  document.getElementById('latestSignal').innerHTML = `
+    <div class="pill ${status.cls}" style="margin-bottom:10px;">BMI ${b.toFixed(1)} · ${status.label}</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.55;">
+      <b style="color:var(--text);">Latest entry:</b><br>
+      ${latestJournal ? `${esc(latestJournal.date)} · ${esc(shortText(latestJournal.comment || latestJournal.checkin?.winTag || 'Structured check-in'))}` : 'No journal signal yet.'}
+    </div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-top:12px;">
+      <b style="color:var(--accent);">Latest win:</b><br>
+      ${latestWin ? `${esc(latestWin.date)} · ${esc(shortText(latestWin.checkin?.winTag || latestWin.comment))}` : 'Mark a quick win in today’s check-in.'}
+    </div>`;
+
+  const healthyKg = 24.9 * HEIGHT_M * HEIGHT_M;
+  const totalLbs = latest.kg * 2.20462;
+  const nextStoneBoundaryKg = Math.floor(totalLbs / 14) * 14 / 2.20462;
+  const nextFiveKg = Math.floor(latest.kg / 5) * 5;
+  const milestones = [
+    {label:'Next stone line', value:fmtStone(nextStoneBoundaryKg), gap:latest.kg - nextStoneBoundaryKg},
+    {label:'Healthy BMI', value:`${healthyKg.toFixed(1)} kg`, gap:latest.kg - healthyKg},
+    {label:'Target weight', value:`${targetKg.toFixed(1)} kg`, gap:latest.kg - targetKg},
+    {label:'Next 5 kg marker', value:`${nextFiveKg.toFixed(0)} kg`, gap:latest.kg - nextFiveKg}
+  ].filter(m => m.gap > 0.05);
+  document.getElementById('milestoneGrid').innerHTML = milestones.map(m => `
+    <div class="stat-card"><div class="stat-label">${esc(m.label)}</div><div class="stat-value">${esc(m.value)}</div><div class="stat-sub">${m.gap.toFixed(1)} kg away</div></div>`).join('');
+
+  const wins = [...journalData].sort((a,b) => b.date.localeCompare(a.date)).filter(journalHasQuickWin).slice(0, 12);
+  document.getElementById('quickWins').innerHTML = wins.length ? wins.map(j => `
+    <div class="win-item">
+      <div class="journal-date">${esc(j.date)} ${j.day ? '· ' + esc(j.day) : ''}</div>
+      <div class="journal-text">${esc(shortText(j.checkin?.winTag || j.comment, 170))}</div>
+    </div>`).join('') : '<div style="color:var(--muted);font-size:13px;">Mark quick wins from the journal form and they will collect here.</div>';
+
+  const checkins = [...journalData].filter(j => j.checkin).sort((a,b) => b.date.localeCompare(a.date));
+  const recent = checkins.slice(0, 14);
+  const omadDays = recent.filter(j => j.checkin.omadKept).length;
+  const alcoholDays = recent.filter(j => j.checkin.alcohol).length;
+  const avg = key => {
+    const vals = recent.map(j => Number(j.checkin[key])).filter(Boolean);
+    return vals.length ? (vals.reduce((a,v) => a + v, 0) / vals.length).toFixed(1) : '—';
+  };
+  document.getElementById('stateCheck').innerHTML = `
+    <div class="milestone-grid">
+      <div class="stat-card"><div class="stat-label">OMAD kept</div><div class="stat-value">${recent.length ? omadDays + '/' + recent.length : '—'}</div><div class="stat-sub">recent check-ins</div></div>
+      <div class="stat-card"><div class="stat-label">Food noise</div><div class="stat-value">${avg('foodNoise')}</div><div class="stat-sub">lower is better</div></div>
+      <div class="stat-card"><div class="stat-label">Energy</div><div class="stat-value">${avg('energy')}</div><div class="stat-sub">1-5 average</div></div>
+      <div class="stat-card"><div class="stat-label">Alcohol days</div><div class="stat-value">${recent.length ? alcoholDays : '—'}</div><div class="stat-sub">recent check-ins</div></div>
+    </div>`;
+
+  document.getElementById('todayPrompt').innerHTML = `
+    <div style="font-size:13px;color:var(--muted);line-height:1.55;">
+      Log the smallest useful signal today: hunger, food noise, energy, focus, sleep, OMAD kept, and one quick win if there is one.
+    </div>
+    <button class="btn mt-12" onclick="showPage('journal')">Open Daily Check-in</button>`;
+}
+
+// ═══════════════════════════════════════
+// STATS
+// ═══════════════════════════════════════
+function renderStats() {
+  const sorted = [...weightData].sort((a,b) => b.date.localeCompare(a.date));
+  if (!sorted.length) return;
+
+  const latest = sorted[0];
+  const prev = sorted[1];
+  const oldest = sorted[sorted.length - 1];
+
+  const latBmi = bmi(latest.kg);
+  const {label, cls} = bmiStatus(latBmi);
+  const totalLost = oldest.kg - latest.kg;
+  const change = prev ? latest.kg - prev.kg : 0;
+
+  // Weekly rate is computed by renderChart from the visible slice — placeholder updated there
+  const weeklyRate = null;
+
+  // Recent period (last 30d)
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+  const recent = sorted.filter(d => new Date(d.date) >= cutoff);
+  const recentLost = recent.length > 1 ? recent[recent.length-1].kg - recent[0].kg : 0;
+
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Current Weight</div>
+      <div class="stat-value">${fmtWeight(latest.kg, currentUnit)}</div>
+      <div class="stat-sub">${latest.date}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Since Last</div>
+      <div class="stat-value ${change < 0 ? 'stat-good' : change > 0 ? 'stat-bad' : ''}">${change > 0 ? '+' : ''}${change.toFixed(1)} kg</div>
+      <div class="stat-sub">${change < 0 ? '↓ ' : change > 0 ? '↑ ' : ''}${Math.abs(change * 2.20462).toFixed(1)} lb</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Lost</div>
+      <div class="stat-value stat-good">${totalLost.toFixed(1)} kg</div>
+      <div class="stat-sub">${fmtStone(oldest.kg)} → ${fmtStone(latest.kg)}</div>
+    </div>
+    <div class="stat-card" id="weeklyRateCard">
+      <div class="stat-label">Weekly Rate (trend)</div>
+      <div class="stat-value" id="weeklyRateVal">—</div>
+      <div class="stat-sub" id="weeklyRateSub"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">BMI</div>
+      <div class="stat-value">${latBmi.toFixed(1)}</div>
+      <div class="stat-sub"><span class="pill ${cls}" style="font-size:10px;">${label}</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Last 30 Days</div>
+      <div class="stat-value ${recentLost < 0 ? 'stat-bad' : 'stat-good'}">${recentLost > 0 ? '+' : ''}${recentLost.toFixed(1)} kg</div>
+      <div class="stat-sub">${recent.length} readings</div>
+    </div>
+  `;
+
+  // BMI gauge
+  document.getElementById('bmiValue').textContent = latBmi.toFixed(1);
+  const {label:bl, cls:bc} = bmiStatus(latBmi);
+  document.getElementById('bmiStatus').className = `pill ${bc}`;
+  document.getElementById('bmiStatus').textContent = bl;
+  const pct = Math.min(Math.max((latBmi - 15) / (40 - 15) * 100, 0), 100);
+  document.getElementById('bmiNeedle').style.left = pct + '%';
+  document.getElementById('heightDisplay').textContent = `${HEIGHT_FT}'${HEIGHT_IN}" (${HEIGHT_M.toFixed(2)}m)`;
+  const goalKg = 24.9 * HEIGHT_M * HEIGHT_M;
+  document.getElementById('bmiGoalWeight').textContent = `${goalKg.toFixed(1)} kg / ${fmtStone(goalKg)}`;
+
+  // Pre-fill goals
+  if (!document.getElementById('goalStart').value) {
+    document.getElementById('goalStart').value = latest.kg.toFixed(1);
+    document.getElementById('goalTarget').value = goalKg.toFixed(1);
+  }
+  // Always refresh chart so weekly rate card gets updated from visible slice
+  requestAnimationFrame(() => renderChart());
+}
+
+// ═══════════════════════════════════════
+// GOALS
+// ═══════════════════════════════════════
+function updateGoals() {
+  const start = parseFloat(document.getElementById('goalStart').value);
+  const target = parseFloat(document.getElementById('goalTarget').value);
+  if (isNaN(start) || isNaN(target) || start <= target) {
+    document.getElementById('goalOutput').innerHTML = '';
+    renderChart();
+    renderReset();
+    return;
+  }
+  const tolose = start - target;
+
+  // Get current weekly rate from the visible chart slice (computed by renderChart)
+  const rateEl = document.getElementById('weeklyRateVal');
+  const rateText = rateEl ? rateEl.textContent : '';
+  // Parse it back — format is e.g. "−0.52 kg/wk" or "+0.01 kg/wk"
+  const rateMatch = rateText.match(/([\d.]+)\s*kg/);
+  const isGain = rateText.startsWith('+');
+  const weeklyRate = rateMatch ? (isGain ? -parseFloat(rateMatch[1]) : parseFloat(rateMatch[1])) : 0;
+
+  const weeksNeeded = weeklyRate > 0 ? tolose / weeklyRate : Infinity;
+  const targetDate = new Date();
+  targetDate.setDate(targetDate.getDate() + (weeksNeeded * 7));
+
+  document.getElementById('goalOutput').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <div><span style="color:var(--muted);font-size:11px;">To lose</span><br><b>${tolose.toFixed(1)} kg</b> / ${(tolose*2.20462).toFixed(1)} lb</div>
+      <div><span data-rate style="color:var(--muted);font-size:11px;">At trend rate (${weeklyRate.toFixed(2)} kg/wk)</span><br><b data-date style="color:var(--accent);">${isFinite(weeksNeeded) ? targetDate.toDateString() : '—'}</b></div>
+      <div><span style="color:var(--muted);font-size:11px;">Target BMI</span><br><b>${bmi(target).toFixed(1)}</b> <span class="pill ${bmiStatus(bmi(target)).cls}" style="font-size:10px;">${bmiStatus(bmi(target)).label}</span></div>
+      <div><span style="color:var(--muted);font-size:11px;">Target (stones)</span><br><b>${fmtStone(target)}</b></div>
+    </div>
+  `;
+  renderChart();
+  renderReset();
+}
+
+// ═══════════════════════════════════════
+// CHART
+// ═══════════════════════════════════════
+function updateChartRange() {
+  chartRangeStart = parseInt(document.getElementById('rangeStart').value);
+  chartRangeEnd = parseInt(document.getElementById('rangeEnd').value);
+  if (chartRangeStart > chartRangeEnd - 5) {
+    chartRangeStart = Math.max(0, chartRangeEnd - 5);
+    document.getElementById('rangeStart').value = chartRangeStart;
+  }
+  renderChart();
+}
+
+function renderChart() {
+  const unit = document.getElementById('chartUnit').value;
+  const sorted = [...weightData].sort((a,b) => a.date.localeCompare(b.date));
+  const n = sorted.length;
+  const si = Math.floor(chartRangeStart / 100 * (n - 1));
+  const ei = Math.min(n - 1, Math.floor(chartRangeEnd / 100 * (n - 1)));
+  const slice = sorted.slice(si, ei + 1);
+
+  document.getElementById('rangeDates').textContent = `${slice[0]?.date} → ${slice[slice.length-1]?.date}`;
+
+  const toVal = kg => unit === 'kg' ? kg : kg * 2.20462 / 14;
+
+  const labels = slice.map(d => d.date);
+  const vals = slice.map(d => toVal(d.kg));
+
+  // Trend: regress on indices (0,1,2…) so Chart.js plots a perfectly straight line.
+  // For the weekly RATE we use real calendar days across the same slice.
+  const m = vals.length;
+  const iMean = (m - 1) / 2;
+  const vMean = vals.reduce((a,b) => a+b, 0) / m;
+  let numI = 0, denI = 0;
+  vals.forEach((v, i) => { numI += (i - iMean) * (v - vMean); denI += (i - iMean) ** 2; });
+  const slopeIdx = denI ? numI / denI : 0;
+  const interceptIdx = vMean - slopeIdx * iMean;
+  // Two-point straight trend: only need start and end values
+  const trendStart = interceptIdx;
+  const trendEnd = interceptIdx + slopeIdx * (m - 1);
+  const trend = [trendStart, trendEnd];
+  const trendLabels = [labels[0], labels[m - 1]];
+
+  // Weekly rate: slope of the same regression but in kg/week using real day span
+  // slopeIdx is in display-units per index. Convert back to kg per index, then scale by real days.
+  const kgPerIdx = unit === 'kg' ? slopeIdx : slopeIdx * 6.35029; // stone→kg
+  const totalDays = (new Date(slice[slice.length-1].date) - new Date(slice[0].date)) / 86400000;
+  const daysPerIdx = m > 1 ? totalDays / (m - 1) : 1;
+  const kgPerWeek = daysPerIdx > 0 ? kgPerIdx / daysPerIdx * 7 : 0;
+  const weeklyRate = -kgPerWeek; // positive = losing weight
+
+  // Push rate to stat card
+  const rateEl = document.getElementById('weeklyRateVal');
+  const rateSubEl = document.getElementById('weeklyRateSub');
+  if (rateEl) {
+    rateEl.className = `stat-value ${weeklyRate > 0.005 ? 'stat-good' : weeklyRate < -0.005 ? 'stat-bad' : ''}`;
+    rateEl.textContent = `${weeklyRate > 0.005 ? '−' : weeklyRate < -0.005 ? '+' : ''}${Math.abs(weeklyRate).toFixed(2)} kg/wk`;
+    rateSubEl.textContent = `${weeklyRate > 0.005 ? '↓' : weeklyRate < -0.005 ? '↑' : ''} ${Math.abs(weeklyRate * 2.20462).toFixed(2)} lb/wk`;
+  }
+
+  // Also refresh goals with same rate (avoids stale value)
+  const goalTarget = parseFloat(document.getElementById('goalTarget').value);
+  const goalStart = parseFloat(document.getElementById('goalStart').value);
+  if (!isNaN(goalTarget) && !isNaN(goalStart) && goalStart > goalTarget && weeklyRate > 0) {
+    const weeksNeeded = (goalStart - goalTarget) / weeklyRate;
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + weeksNeeded * 7);
+    const rateDisplay = document.querySelector('#goalOutput [data-rate]');
+    if (rateDisplay) {
+      rateDisplay.textContent = `At trend rate (${weeklyRate.toFixed(2)} kg/wk)`;
+    }
+    const dateDisplay = document.querySelector('#goalOutput [data-date]');
+    if (dateDisplay) dateDisplay.textContent = targetDate.toDateString();
+  }
+
+  // Y axis min = goal target (if set and lower than data min)
+  const targetKg = parseFloat(document.getElementById('goalTarget').value);
+  const dataMin = Math.min(...vals);
+  const targetVal = !isNaN(targetKg) ? toVal(targetKg) : null;
+  const yMin = targetVal !== null ? Math.min(dataMin, targetVal) * 0.995 : undefined;
+
+  // Goal line dataset
+  const goalDataset = targetVal !== null ? [{
+    label: 'Goal',
+    data: labels.map(() => targetVal),
+    borderColor: '#818cf8',
+    borderWidth: 1.5,
+    borderDash: [3, 5],
+    pointRadius: 0,
+    tension: 0,
+  }] : [];
+
+  if (chartInstance) chartInstance.destroy();
+  const ctx = document.getElementById('weightChart').getContext('2d');
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: unit === 'kg' ? 'Weight (kg)' : 'Weight (stone)',
+          data: vals,
+          borderColor: '#6ee7b7',
+          backgroundColor: 'rgba(110,231,183,0.08)',
+          borderWidth: 2,
+          pointRadius: vals.length < 50 ? 4 : 2,
+          pointBackgroundColor: '#6ee7b7',
+          tension: 0.3,
+          fill: true,
+        },
+        {
+          label: 'Trend',
+          data: trendLabels.map((lbl, i) => ({x: lbl, y: trend[i]})),
+          borderColor: '#f59e0b',
+          borderWidth: 2,
+          borderDash: [5, 4],
+          pointRadius: 0,
+          tension: 0,
+          parsing: false,
+        },
+        ...goalDataset
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#7a7f9a', font: { family: 'DM Sans' } } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const kg = unit === 'kg' ? ctx.parsed.y : ctx.parsed.y * 6.35029;
+              return `${ctx.dataset.label}: ${fmtWeight(kg, 'kg')} / ${fmtStone(kg)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'category',
+          ticks: { color: '#7a7f9a', maxTicksLimit: 10, font: { size: 10 }, maxRotation: 0 },
+          grid: { color: 'rgba(46,50,72,0.5)' }
+        },
+        y: {
+          min: yMin,
+          ticks: { color: '#7a7f9a', font: { size: 11 } },
+          grid: { color: 'rgba(46,50,72,0.5)' }
+        }
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════
+// ENTRY FORM
+// ═══════════════════════════════════════
+function syncEntryFromSt() {
+  const stone = parseFloat(document.getElementById('entryStone').value) || 0;
+  const lbs = parseFloat(document.getElementById('entryLbs').value) || 0;
+  if (stone || lbs) {
+    document.getElementById('entryKg').value = stLbsToKg(stone, lbs).toFixed(1);
+  }
+}
+
+function syncEntryFromKg() {
+  const kg = parseFloat(document.getElementById('entryKg').value);
+  if (!isNaN(kg)) {
+    const {stone, lbs} = kgToStLbs(kg);
+    document.getElementById('entryStone').value = stone;
+    document.getElementById('entryLbs').value = lbs.toFixed(1);
+  }
+}
+
+function saveEntry() {
+  const date = document.getElementById('entryDate').value;
+  const kg = parseFloat(document.getElementById('entryKg').value);
+  if (!date || isNaN(kg)) {
+    document.getElementById('entryMsg').textContent = '⚠ Please enter a date and weight.';
+    return;
+  }
+  const {stone, lbs} = kgToStLbs(kg);
+  const frac = lbs - Math.floor(lbs);
+  const existing = weightData.findIndex(d => d.date === date);
+  const rec = {date, stone: Math.floor(stone), lbs: Math.floor(lbs), frac: +frac.toFixed(2), kg};
+  if (existing >= 0) {
+    weightData[existing] = rec;
+    document.getElementById('entryMsg').textContent = '✓ Updated existing entry.';
+  } else {
+    weightData.push(rec);
+    document.getElementById('entryMsg').textContent = '✓ Entry saved!';
+  }
+  // Clear form
+  document.getElementById('entryStone').value = '';
+  document.getElementById('entryLbs').value = '';
+  document.getElementById('entryKg').value = '';
+  setTimeout(() => document.getElementById('entryMsg').textContent = '', 3000);
+  renderStats();
+  renderTable();
+  renderChart();
+  renderReset();
+  persistAll();
+}
+
+// set today's date as default
+document.getElementById('entryDate').value = new Date().toISOString().split('T')[0];
+document.getElementById('jDate').value = new Date().toISOString().split('T')[0];
+
+// ═══════════════════════════════════════
+// TABLE
+// ═══════════════════════════════════════
+let tableSortDir = -1;
+
+function sortTable(field) {
+  tableSortDir = -tableSortDir;
+  weightData.sort((a,b) => tableSortDir * a.date.localeCompare(b.date));
+  renderTable();
+}
+
+function renderTable() {
+  const search = document.getElementById('tableSearch').value.toLowerCase();
+  const sorted = [...weightData].sort((a,b) => b.date.localeCompare(a.date));
+  const filtered = sorted.filter(d => d.date.includes(search));
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = filtered.map((d, i) => {
+    const prev = filtered[i+1];
+    const change = prev ? d.kg - prev.kg : null;
+    const b = bmi(d.kg);
+    const {label, cls} = bmiStatus(b);
+    return `<tr id="row-${d.date}">
+      <td>${d.date}</td>
+      <td>${d.stone}st ${d.lbs + d.frac}lb</td>
+      <td>${(d.stone * 14 + d.lbs + d.frac).toFixed(1)} lb</td>
+      <td>${d.kg.toFixed(1)}</td>
+      <td><span class="pill ${cls}" style="font-size:10px;">${b.toFixed(1)}</span></td>
+      <td style="color:${change === null ? 'var(--muted)' : change < 0 ? 'var(--accent)' : 'var(--accent3)'}">${change === null ? '—' : (change > 0 ? '+' : '') + change.toFixed(2) + ' kg'}</td>
+      <td id="del-${d.date}"><button class="delete-btn" onclick="confirmDelete('${d.date}')">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function confirmDelete(date) {
+  const cell = document.getElementById('del-' + date);
+  if (!cell) return;
+  cell.innerHTML = `<span style="font-size:11px;color:var(--accent3);">Sure?</span>
+    <button class="delete-btn" style="color:var(--accent3);font-weight:700;" onclick="deleteEntry('${date}')">Yes</button>
+    <button class="delete-btn" onclick="renderTable()">No</button>`;
+}
+
+function deleteEntry(date) {
+  weightData = weightData.filter(d => d.date !== date);
+  renderStats();
+  renderTable();
+  renderChart();
+  renderReset();
+  persistAll();
+}
+
+function exportCSV() {
+  const sorted = [...weightData].sort((a,b) => b.date.localeCompare(a.date));
+  const rows = [['Date','Stone','Lbs','KG','BMI']];
+  sorted.forEach(d => rows.push([d.date, `${d.stone}st ${d.lbs}lb`, (d.stone*14+d.lbs+d.frac).toFixed(1), d.kg.toFixed(1), bmi(d.kg).toFixed(1)]));
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'weight_data.csv';
+  a.click();
+}
+
+// ═══════════════════════════════════════
+// JOURNAL
+// ═══════════════════════════════════════
+function ratingValue(id) {
+  const val = parseInt(document.getElementById(id).value, 10);
+  return Number.isInteger(val) && val >= 1 && val <= 5 ? val : null;
+}
+
+function readCheckin() {
+  const checkin = {
+    hunger: ratingValue('jHunger'),
+    foodNoise: ratingValue('jFoodNoise'),
+    energy: ratingValue('jEnergy'),
+    focus: ratingValue('jFocus'),
+    sleep: ratingValue('jSleep'),
+    winTag: document.getElementById('jWinTag').value.trim(),
+    omadKept: document.getElementById('jOmadKept').checked,
+    alcohol: document.getElementById('jAlcohol').checked,
+    exercise: document.getElementById('jExercise').checked,
+    quickWin: document.getElementById('jQuickWin').checked
+  };
+  const hasSignal = Object.values(checkin).some(v => v === true || typeof v === 'number' || (typeof v === 'string' && v.length));
+  return hasSignal ? checkin : null;
+}
+
+function setCheckin(checkin = {}) {
+  document.getElementById('jHunger').value = checkin.hunger || '';
+  document.getElementById('jFoodNoise').value = checkin.foodNoise || '';
+  document.getElementById('jEnergy').value = checkin.energy || '';
+  document.getElementById('jFocus').value = checkin.focus || '';
+  document.getElementById('jSleep').value = checkin.sleep || '';
+  document.getElementById('jWinTag').value = checkin.winTag || '';
+  document.getElementById('jOmadKept').checked = !!checkin.omadKept;
+  document.getElementById('jAlcohol').checked = !!checkin.alcohol;
+  document.getElementById('jExercise').checked = !!checkin.exercise;
+  document.getElementById('jQuickWin').checked = !!checkin.quickWin;
+}
+
+function saveJournal() {
+  const date = document.getElementById('jDate').value;
+  const comment = document.getElementById('jComment').value.trim();
+  const weightVal = document.getElementById('jWeight').value;
+  const notes = document.getElementById('jNotes').value.trim();
+  const checkin = readCheckin();
+  if (!date || (!comment && !checkin)) {
+    document.getElementById('jMsg').textContent = '⚠ Date and one signal required.';
+    return;
+  }
+  const weight = weightVal ? parseFloat(weightVal) : null;
+  const d = new Date(date);
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const day = days[d.getDay()];
+  const existing = journalData.findIndex(j => j.date === date);
+  const rec = {date, day, comment, weight, notes};
+  if (checkin) rec.checkin = checkin;
+  if (existing >= 0) journalData[existing] = rec;
+  else journalData.push(rec);
+  clearJournalForm();
+  document.getElementById('jMsg').textContent = '✓ Entry saved!';
+  setTimeout(() => document.getElementById('jMsg').textContent = '', 3000);
+  renderJournal();
+  renderReset();
+  persistAll();
+}
+
+function clearJournalForm() {
+  document.getElementById('jDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('jComment').value = '';
+  document.getElementById('jWeight').value = '';
+  document.getElementById('jNotes').value = '';
+  setCheckin();
+}
+
+function editJournal(date) {
+  const j = journalData.find(d => d.date === date);
+  if (!j) return;
+  document.getElementById('jDate').value = j.date;
+  document.getElementById('jComment').value = j.comment || '';
+  document.getElementById('jWeight').value = j.weight || '';
+  document.getElementById('jNotes').value = j.notes || '';
+  setCheckin(j.checkin);
+  document.querySelector('.journal-form').scrollIntoView({behavior:'smooth'});
+}
+
+function renderJournal() {
+  const search = (document.getElementById('jSearch')?.value || '').toLowerCase();
+  const sorted = [...journalData].sort((a,b) => b.date.localeCompare(a.date));
+  const filtered = sorted.filter(j => {
+    const checkText = j.checkin ? Object.values(j.checkin).join(' ').toLowerCase() : '';
+    return !search || j.date.includes(search) || (j.comment || '').toLowerCase().includes(search) || (j.notes||'').toLowerCase().includes(search) || checkText.includes(search);
+  });
+  document.getElementById('journalCount').textContent = `${filtered.length} entries`;
+  document.getElementById('journalList').innerHTML = filtered.map(j => `
+    <div class="journal-entry ${j.weight ? 'has-weight' : ''}" onclick="editJournal('${j.date}')">
+      <div class="journal-entry-header">
+        <div>
+          <span class="journal-day">${esc(j.day)}</span>
+          <span class="journal-date"> · ${j.date}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          ${j.weight ? `<span class="journal-weight-badge">${j.weight} kg · ${fmtStone(j.weight)}</span>` : ''}
+          <button class="delete-btn" id="jdel-${j.date}" onclick="event.stopPropagation();deleteJournal('${j.date}')">✕</button>
+        </div>
+      </div>
+      <div class="journal-text">${esc(j.comment)}</div>
+      ${j.checkin ? `<div class="row mt-12" style="gap:6px;">
+        ${j.checkin.omadKept ? '<span class="tag">OMAD</span>' : ''}
+        ${j.checkin.alcohol ? '<span class="tag">Alcohol</span>' : ''}
+        ${j.checkin.exercise ? '<span class="tag">Exercise</span>' : ''}
+        ${j.checkin.quickWin ? '<span class="tag">Quick win</span>' : ''}
+        ${j.checkin.foodNoise ? `<span class="tag">Noise ${j.checkin.foodNoise}/5</span>` : ''}
+        ${j.checkin.energy ? `<span class="tag">Energy ${j.checkin.energy}/5</span>` : ''}
+        ${j.checkin.winTag ? `<span class="tag">${esc(j.checkin.winTag)}</span>` : ''}
+      </div>` : ''}
+      ${j.notes ? `<div class="journal-notes">${esc(j.notes)}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function deleteJournal(date) {
+  const btn = document.getElementById('jdel-' + date);
+  if (!btn) return;
+  if (btn.dataset.confirming) {
+    journalData = journalData.filter(j => j.date !== date);
+    renderJournal();
+    renderReset();
+    persistAll();
+  } else {
+    btn.dataset.confirming = '1';
+    btn.textContent = 'Sure?';
+    btn.style.color = 'var(--accent3)';
+    setTimeout(() => { if (btn) { btn.textContent = '✕'; btn.style.color = ''; delete btn.dataset.confirming; }}, 3000);
+  }
+}
+
+// ═══════════════════════════════════════
+// OMAD
+// ═══════════════════════════════════════
+const mealQtys = {};
+
+function renderOMAD() {
+  const cats = [...new Set(omadFoods.map(f => f.cat))];
+  document.getElementById('omadFoodList').innerHTML = cats.map(cat => {
+    const items = omadFoods.filter(f => f.cat === cat);
+    return `
+      <div class="food-category">
+        <div class="category-header">${esc(cat)}</div>
+        ${items.map((f, fi) => {
+          const key = `${cat}-${fi}`;
+          return `
+          <div class="food-item">
+            <div>
+              <div class="food-name">${esc(f.name)}</div>
+              <div class="food-meta">${esc(f.serving)}</div>
+            </div>
+            <div style="font-size:11px;color:var(--muted);">
+              P:${f.protein}g F:${f.fat}g C:${f.carbs}g
+            </div>
+            <div class="food-cals">${f.cals} cal</div>
+            <input class="food-qty" type="number" min="0" step="0.5" placeholder="0"
+              id="qty-${key}"
+              value="${mealQtys[key] || ''}"
+              oninput="setQty('${key}', this.value); updateTotals()">
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+  }).join('');
+}
+
+function setQty(key, val) {
+  const v = parseFloat(val);
+  if (!isNaN(v) && v > 0) mealQtys[key] = v;
+  else delete mealQtys[key];
+  persistAll();
+}
+
+function updateTotals() {
+  const cats = [...new Set(omadFoods.map(f => f.cat))];
+  let totCals = 0, totP = 0, totF = 0, totC = 0, totFi = 0;
+  cats.forEach(cat => {
+    omadFoods.filter(f => f.cat === cat).forEach((f, fi) => {
+      const key = `${cat}-${fi}`;
+      const el = document.getElementById('qty-' + key);
+      const qty = el ? parseFloat(el.value) || 0 : (mealQtys[key] || 0);
+      totCals += f.cals * qty;
+      totP += f.protein * qty;
+      totF += f.fat * qty;
+      totC += f.carbs * qty;
+      totFi += f.fibre * qty;
+    });
+  });
+
+  document.getElementById('totCals').textContent = Math.round(totCals);
+  document.getElementById('totProtein').textContent = totP.toFixed(1) + ' g';
+  document.getElementById('totFat').textContent = totF.toFixed(1) + ' g';
+  document.getElementById('totCarbs').textContent = totC.toFixed(1) + ' g';
+  document.getElementById('totFibre').textContent = totFi.toFixed(1) + ' g';
+
+  const target = parseInt(document.getElementById('calTarget').value) || 1500;
+  document.getElementById('calTargetLabel').textContent = target;
+  const pct = Math.min(100, (totCals / target) * 100);
+  document.getElementById('calGauge').style.width = pct + '%';
+  document.getElementById('calGauge').style.background = totCals > target * 1.1 ? 'var(--accent3)' : 'linear-gradient(to right, var(--accent), var(--accent2))';
+
+  const summary = totCals === 0 ? '<p style="color:var(--muted);font-size:12px;">No items added yet — enter quantities above.</p>' :
+    `<div style="font-size:12px;color:var(--muted);">
+      ${totCals > target ? `<span style="color:var(--accent3);">⚠ ${Math.round(totCals - target)} cal over target</span>` :
+        `<span style="color:var(--accent);">✓ ${Math.round(target - totCals)} cal remaining</span>`}
+    </div>`;
+  document.getElementById('omadSummary').innerHTML = summary;
+}
+
+function clearMeal() {
+  Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
+  document.querySelectorAll('.food-qty').forEach(el => el.value = '');
+  updateTotals();
+  persistAll();
+}
+
+function logMealToJournal() {
+  const cats = [...new Set(omadFoods.map(f => f.cat))];
+  let items = [];
+  cats.forEach(cat => {
+    omadFoods.filter(f => f.cat === cat).forEach((f, fi) => {
+      const el = document.getElementById(`qty-${cat}-${fi}`);
+      const qty = el ? parseFloat(el.value) || 0 : 0;
+      if (qty > 0) items.push(`${qty}× ${f.name} (${f.serving})`);
+    });
+  });
+  if (!items.length) { alert('No items in meal.'); return; }
+  const totCals = parseInt(document.getElementById('totCals').textContent);
+  const summary = `OMAD Meal (${totCals} cal):\n` + items.join(', ');
+  document.getElementById('jComment').value = summary;
+  showPage('journal');
+  document.querySelectorAll('nav button')[1].click();
+}
+
+// ═══════════════════════════════════════
+// OMAD FOOD EDITOR
+// ═══════════════════════════════════════
+function openFoodEditor() {
+  refreshCatSuggestions();
+  renderFoodEditorTable();
+  document.getElementById('foodEditorModal').style.display = 'block';
+}
+
+function refreshCatSuggestions() {
+  const cats = [...new Set(omadFoods.map(f => f.cat))].sort();
+  document.getElementById('catSuggestions').innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
+}
+
+function closeFoodEditor() {
+  document.getElementById('foodEditorModal').style.display = 'none';
+  renderOMAD(); // refresh meal builder with any changes
+  persistAll();
+}
+
+function renderFoodEditorTable() {
+  document.getElementById('foodEditorBody').innerHTML = omadFoods.map((f, i) => `
+    <tr style="border-bottom:1px solid var(--border);" id="ferow-${i}">
+      <td style="padding:7px 10px;font-size:12px;">${esc(f.cat)}</td>
+      <td style="padding:7px 10px;font-size:12px;">${esc(f.name)}</td>
+      <td style="padding:7px 10px;font-size:12px;color:var(--muted);">${esc(f.serving)}</td>
+      <td style="padding:7px 10px;font-size:12px;text-align:right;color:var(--accent2);">${f.cals}</td>
+      <td style="padding:7px 10px;font-size:12px;text-align:right;">${f.protein}</td>
+      <td style="padding:7px 10px;font-size:12px;text-align:right;">${f.fat}</td>
+      <td style="padding:7px 10px;font-size:12px;text-align:right;">${f.carbs}</td>
+      <td style="padding:7px 10px;font-size:12px;text-align:right;">${f.fibre}</td>
+      <td style="padding:7px 6px;text-align:right;" id="fdel-${i}">
+        <button class="delete-btn" onclick="editFoodInline(${i})" title="Edit">✎</button>
+        <button class="delete-btn" onclick="confirmFoodDelete(${i})" title="Delete">✕</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function confirmFoodDelete(i) {
+  const cell = document.getElementById('fdel-' + i);
+  if (!cell) return;
+  cell.innerHTML = `<span style="font-size:11px;color:var(--accent3);">Sure?</span>
+    <button class="delete-btn" style="color:var(--accent3);font-weight:700;" onclick="deleteFoodItem(\${i})">Yes</button>
+    <button class="delete-btn" onclick="renderFoodEditorTable()">No</button>`;
+}
+
+function editFoodInline(i) {
+  const f = omadFoods[i];
+  const row = document.getElementById(`ferow-${i}`);
+  row.innerHTML = `
+    <td style="padding:4px 6px;"><input class="food-qty" style="width:120px;" value="${esc(f.cat)}" id="ef-cat-${i}"></td>
+    <td style="padding:4px 6px;"><input class="food-qty" style="width:130px;" value="${esc(f.name)}" id="ef-name-${i}"></td>
+    <td style="padding:4px 6px;"><input class="food-qty" style="width:90px;" value="${esc(f.serving)}" id="ef-serving-${i}"></td>
+    <td style="padding:4px 6px;"><input class="food-qty" style="width:55px;" type="number" value="${f.cals}" id="ef-cals-${i}"></td>
+    <td style="padding:4px 6px;"><input class="food-qty" style="width:45px;" type="number" step="0.1" value="${f.protein}" id="ef-protein-${i}"></td>
+    <td style="padding:4px 6px;"><input class="food-qty" style="width:45px;" type="number" step="0.1" value="${f.fat}" id="ef-fat-${i}"></td>
+    <td style="padding:4px 6px;"><input class="food-qty" style="width:45px;" type="number" step="0.1" value="${f.carbs}" id="ef-carbs-${i}"></td>
+    <td style="padding:4px 6px;"><input class="food-qty" style="width:45px;" type="number" step="0.1" value="${f.fibre}" id="ef-fibre-${i}"></td>
+    <td style="padding:4px 6px;">
+      <button class="btn btn-sm" onclick="saveFoodEdit(${i})">✓</button>
+      <button class="btn btn-ghost btn-sm" onclick="renderFoodEditorTable()">✕</button>
+    </td>
+  `;
+}
+
+function saveFoodEdit(i) {
+  omadFoods[i] = {
+    cat: document.getElementById(`ef-cat-${i}`).value.trim().toUpperCase(),
+    name: document.getElementById(`ef-name-${i}`).value.trim(),
+    serving: document.getElementById(`ef-serving-${i}`).value.trim(),
+    cals: parseFloat(document.getElementById(`ef-cals-${i}`).value) || 0,
+    protein: parseFloat(document.getElementById(`ef-protein-${i}`).value) || 0,
+    fat: parseFloat(document.getElementById(`ef-fat-${i}`).value) || 0,
+    carbs: parseFloat(document.getElementById(`ef-carbs-${i}`).value) || 0,
+    fibre: parseFloat(document.getElementById(`ef-fibre-${i}`).value) || 0,
+  };
+  renderFoodEditorTable();
+  refreshCatSuggestions();
+}
+
+function deleteFoodItem(i) {
+  omadFoods.splice(i, 1);
+  renderFoodEditorTable();
+  refreshCatSuggestions();
+}
+
+function addFoodItem() {
+  const cat = document.getElementById('newFoodCat').value.trim().toUpperCase();
+  const name = document.getElementById('newFoodName').value.trim();
+  const serving = document.getElementById('newFoodServing').value.trim();
+  const cals = parseFloat(document.getElementById('newFoodCals').value) || 0;
+  const protein = parseFloat(document.getElementById('newFoodProtein').value) || 0;
+  const fat = parseFloat(document.getElementById('newFoodFat').value) || 0;
+  const carbs = parseFloat(document.getElementById('newFoodCarbs').value) || 0;
+  const fibre = parseFloat(document.getElementById('newFoodFibre').value) || 0;
+  if (!cat || !name) {
+    document.getElementById('foodEditorMsg').textContent = '⚠ Category and name required.';
+    return;
+  }
+  omadFoods.push({cat, name, serving, cals, protein, fat, carbs, fibre});
+  // Clear form
+  ['newFoodCat','newFoodName','newFoodServing','newFoodCals','newFoodProtein','newFoodFat','newFoodCarbs','newFoodFibre']
+    .forEach(id => document.getElementById(id).value = '');
+  document.getElementById('foodEditorMsg').textContent = `✓ "${name}" added.`;
+  setTimeout(() => document.getElementById('foodEditorMsg').textContent = '', 2500);
+  renderFoodEditorTable();
+  refreshCatSuggestions();
+}
+
+// ═══════════════════════════════════════
+// JSON EXPORT / IMPORT
+// ═══════════════════════════════════════
+function exportJSON() {
+  const backup = currentBackup();
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `weight-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      // Validate it looks right
+      if (!data.weightData || !data.journalData) {
+        showImportMsg('⚠ Invalid backup file — missing data sections.', true);
+        return;
+      }
+      // Merge or replace — ask via inline banner
+      showImportChoice(data);
+    } catch (err) {
+      showImportMsg('⚠ Could not parse file: ' + err.message, true);
+    }
+    event.target.value = ''; // reset input
+  };
+  reader.readAsText(file);
+}
+
+let pendingImport = null;
+
+function showImportChoice(data) {
+  pendingImport = data;
+  const wCount = data.weightData ? data.weightData.length : 0;
+  const jCount = data.journalData ? data.journalData.length : 0;
+  const dateStr = data.exported ? data.exported.split('T')[0] : 'unknown date';
+  document.getElementById('importModalMsg').innerHTML =
+    `Found <b>${wCount}</b> weight records and <b>${jCount}</b> journal entries from <b>${dateStr}</b>.<br><br>
+    <b>Replace All</b> — overwrites your current data.<br>
+    <b>Merge</b> — adds records not already present (safe, no duplicates).`;
+  const modal = document.getElementById('importModal');
+  modal.style.display = 'flex';
+}
+
+function applyImport(mode) {
+  const data = pendingImport;
+  if (!data) return;
+  if (mode === 'replace') {
+    weightData = data.weightData;
+    journalData = data.journalData;
+    if (data.omadFoods) { omadFoods.length = 0; data.omadFoods.forEach(f => omadFoods.push(f)); }
+    Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
+    if (data.mealQtys) Object.assign(mealQtys, data.mealQtys);
+  } else {
+    // Merge: add records not already present (by date)
+    const wDates = new Set(weightData.map(d => d.date));
+    data.weightData.forEach(d => { if (!wDates.has(d.date)) weightData.push(d); });
+    const jDates = new Set(journalData.map(d => d.date));
+    data.journalData.forEach(d => { if (!jDates.has(d.date)) journalData.push(d); });
+    if (data.omadFoods) {
+      const existing = new Set(omadFoods.map(f => f.name));
+      data.omadFoods.forEach(f => { if (!existing.has(f.name)) omadFoods.push(f); });
+    }
+  }
+  document.getElementById('importModal').style.display = 'none';
+  pendingImport = null;
+  persistAll();
+  renderStats();
+  renderTable();
+  renderChart();
+  renderJournal();
+  renderOMAD();
+  renderReset();
+  showImportMsg(`✓ Import complete (${mode}).`);
+}
+
+function showImportMsg(msg, isError) {
+  const el = document.getElementById('saveIndicator');
+  const orig = el.textContent;
+  el.textContent = msg;
+  el.style.color = isError ? 'var(--accent3)' : 'var(--accent)';
+  el.style.opacity = '1';
+  setTimeout(() => { el.textContent = '✓ Saved'; el.style.color = 'var(--accent)'; el.style.opacity = '0'; }, 4000);
+}
+
+// ═══════════════════════════════════════
+// PERSISTENCE (window.storage API)
+// ═══════════════════════════════════════
+
+// Show a small save indicator in the header
+function showSaved() {
+  const el = document.getElementById('saveIndicator');
+  el.textContent = '✓ Saved';
+  el.style.color = 'var(--accent)';
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 2000);
+}
+
+function showSaveError(msg) {
+  const el = document.getElementById('saveIndicator');
+  el.textContent = msg || '⚠ Not saved';
+  el.style.color = 'var(--accent3)';
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; el.style.color = 'var(--accent)'; }, 5000);
+}
+
+function currentBackup() {
+  return {
+    version: 3,
+    exported: new Date().toISOString(),
+    savedBy: 'browser-localStorage',
+    phases: PHASES,
+    weightData,
+    journalData,
+    omadFoods,
+    mealQtys
+  };
+}
+
+function applyLoadedData(data) {
+  if (!data || !Array.isArray(data.weightData) || !Array.isArray(data.journalData)) return false;
+  weightData = data.weightData;
+  journalData = data.journalData;
+  if (Array.isArray(data.omadFoods)) {
+    omadFoods.length = 0;
+    data.omadFoods.forEach(f => omadFoods.push(f));
+  }
+  Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
+  if (data.mealQtys && typeof data.mealQtys === 'object') Object.assign(mealQtys, data.mealQtys);
+  return true;
+}
+
+async function persistAll() {
+  try {
+    const data = currentBackup();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    if (window.storage?.set) {
+      await window.storage.set('weightTrackerData', JSON.stringify(data));
+    }
+    showSaved();
+  } catch (e) {
+    showSaveError('⚠ Save failed');
+  }
+}
+
+async function loadPersisted() {
+  try {
+    const local = localStorage.getItem(STORAGE_KEY);
+    if (local && applyLoadedData(JSON.parse(local))) return;
+  } catch (e) {
+    showSaveError('⚠ Local data unreadable');
+  }
+
+  if (!window.storage?.get) return;
+
+  try {
+    const combined = await window.storage.get('weightTrackerData');
+    if (combined && applyLoadedData(JSON.parse(combined.value))) {
+      await persistAll();
+      return;
+    }
+  } catch (e) {}
+
+  try {
+    const wd = await window.storage.get('weightData');
+    const jd = await window.storage.get('journalData');
+    if (wd && jd) {
+      const legacy = {
+        weightData: JSON.parse(wd.value),
+        journalData: JSON.parse(jd.value),
+        mealQtys: {},
+        omadFoods
+      };
+      try {
+        const mq = await window.storage.get('mealQtys');
+        if (mq) legacy.mealQtys = JSON.parse(mq.value);
+      } catch (e) {}
+      try {
+        const of = await window.storage.get('omadFoods');
+        if (of) legacy.omadFoods = JSON.parse(of.value);
+      } catch (e) {}
+      if (applyLoadedData(legacy)) await persistAll();
+    }
+  } catch (e) {}
+}
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+async function init() {
+  await loadPersisted();
+  renderStats();
+  renderTable();
+  renderChart();
+  renderJournal();
+  renderOMAD();
+  updateGoals();
+  renderReset();
+}
+
+init();
+</script>
+</body>
+</html>
