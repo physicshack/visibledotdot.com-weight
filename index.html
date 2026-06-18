@@ -1222,6 +1222,7 @@ let trueStartKg = null; // user-defined starting weight for Total Lost calculati
 let sortDir = -1;
 let chartInstance = null;
 let chartRangeStart = 0, chartRangeEnd = 100;
+let chartStartWasSet = false; // true when restored from saved prefs — skips auto-detect
 const STORAGE_KEY = 'weightTrackerData';
 
 function esc(value) {
@@ -1592,10 +1593,68 @@ function updateChartRange() {
   renderChart();
 }
 
+// Returns a chartRangeStart percentage (0–100) representing the smart default
+// start date: the peak that initiated the current loss run, or a 3-month
+// window when gaining. Only called on first render when no saved pref exists.
+function computeSmartChartStart(sorted) {
+  if (sorted.length < 2) return 0;
+
+  // Build monthly max: key = "YYYY-MM"
+  const monthlyMax = {};
+  sorted.forEach(d => {
+    const ym = d.date.slice(0, 7);
+    if (!monthlyMax[ym] || d.kg > monthlyMax[ym]) monthlyMax[ym] = d.kg;
+  });
+
+  const months = Object.keys(monthlyMax).sort().reverse(); // most-recent first
+  if (months.length < 2) return 0;
+
+  const currentMax = monthlyMax[months[0]];
+  const isGaining = months.every(m => monthlyMax[m] <= currentMax);
+
+  if (isGaining) {
+    // Show 3-month window
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 3);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const idx = sorted.findIndex(d => d.date >= cutoffStr);
+    return idx < 0 ? 0 : Math.round(idx / (sorted.length - 1) * 100);
+  }
+
+  // Walk back through months while monthly max keeps rising (still in peak zone).
+  // Stop when it drops by more than the noise threshold — we've gone past the peak.
+  const THRESHOLD_KG = 1.0;
+  let peakMonthIdx = 0;
+  for (let i = 1; i < months.length; i++) {
+    const rise = monthlyMax[months[i]] - monthlyMax[months[i - 1]];
+    if (rise < -THRESHOLD_KG) break;
+    peakMonthIdx = i;
+  }
+
+  // Find the actual highest entry on or after the start of the peak month
+  const peakRangeStart = months[peakMonthIdx] + '-01';
+  let peakEntry = null;
+  sorted.forEach(d => {
+    if (d.date >= peakRangeStart && (!peakEntry || d.kg > peakEntry.kg)) peakEntry = d;
+  });
+
+  if (!peakEntry) return 0;
+  const peakIdx = sorted.findIndex(d => d.date === peakEntry.date);
+  return Math.round(peakIdx / (sorted.length - 1) * 100);
+}
+
 function renderChart() {
   const unit = document.getElementById('chartUnit').value;
   const sorted = [...weightData].sort((a,b) => a.date.localeCompare(b.date));
   const n = sorted.length;
+
+  // Auto-detect smart start on first render (no saved pref, slider at default)
+  if (chartInstance === null && !chartStartWasSet && n > 1) {
+    chartRangeStart = computeSmartChartStart(sorted);
+    document.getElementById('rangeStart').value = chartRangeStart;
+    chartStartWasSet = true;
+  }
+
   const si = Math.floor(chartRangeStart / 100 * (n - 1));
   const ei = Math.min(n - 1, Math.floor(chartRangeEnd / 100 * (n - 1)));
   const slice = sorted.slice(si, ei + 1);
@@ -2475,7 +2534,7 @@ async function loadFromFirebase() {
     if (data.prefs) {
       const p = data.prefs;
       if (p.currentUnit) currentUnit = p.currentUnit;
-      if (typeof p.chartRangeStart === 'number') chartRangeStart = p.chartRangeStart;
+      if (typeof p.chartRangeStart === 'number') { chartRangeStart = p.chartRangeStart; chartStartWasSet = true; }
       if (typeof p.chartRangeEnd === 'number') chartRangeEnd = p.chartRangeEnd;
       if (typeof p.trueStartKg === 'number') trueStartKg = p.trueStartKg;
       else trueStartKg = null;
