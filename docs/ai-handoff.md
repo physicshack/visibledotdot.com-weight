@@ -30,9 +30,9 @@ See `docs/task-queue.md` for full history.
 
 Suggested priorities (in order):
 
-1. **Create `docs/unattended-ai-workflow.md`** — signalling protocol, labels, task queue rules (mirror from budget repo)
-2. **Add README** — local dev, file structure, deployment instructions
-3. **Deploy PR #1–#3 + #7 to production** — Fasthosts FTP, human must action
+1. **Add README** — local dev, file structure, deployment instructions
+2. **Deploy PRs to production** — Fasthosts FTP, human must action
+3. **OMAD tool UX improvements** — quantity inputs, repeat-meal shortcut, search/filter (see feedback section below)
 4. **PWA setup** — manifest, icons, service worker
 5. **Shared journal** — connect journal entries to the finance app (see sibling repo)
 

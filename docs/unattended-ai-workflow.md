@@ -63,9 +63,9 @@ The reviewing agent must post one of these outcomes AND remove their label befor
 
 | Outcome | Meaning |
 |---|---|
-| `REVIEW-PASS` | Ready to merge |
-| `REVIEW-FINDINGS` | Issues found — list them; equivalent to REQUEST_CHANGES |
-| `REVIEW-BLOCKED` | Human decision required |
+| `REVIEW-PASS` | Remove reviewer label; leave all agent-next labels clear. Ready to merge. |
+| `REVIEW-FINDINGS` | Remove reviewer label AND add implementer's `agent:*-next` label. List findings. |
+| `REVIEW-BLOCKED` | Remove all agent-next labels AND add `agent:blocked`. Neither agent acts until human resolves. |
 
 Before any merge:
 - No `agent:*-next` label remains

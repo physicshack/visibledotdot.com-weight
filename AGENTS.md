@@ -94,10 +94,10 @@ Agent-next labels are **merge gates**, not notifications. Do not merge while any
 - `agent:codex-next` — Codex must act before merge
 - `agent:blocked` — human decision required; neither agent acts
 
-**Review outcomes** — the reviewing agent must post one of these in a comment AND remove their label:
-- `REVIEW-PASS` — changes look correct, ready for merge
-- `REVIEW-FINDINGS` — issues found (equivalent to REQUEST_CHANGES; list findings)
-- `REVIEW-BLOCKED` — a human-only decision is needed before work can continue
+**Review outcomes** — the reviewing agent posts one of these AND updates labels atomically:
+- `REVIEW-PASS` — remove reviewer label; leave all agent-next labels clear (ready to merge)
+- `REVIEW-FINDINGS` — remove reviewer label AND add implementer's `agent:*-next` label (findings must not coexist with a clear label state)
+- `REVIEW-BLOCKED` — remove all agent-next labels AND add `agent:blocked`
 
 **Before merging a PR:**
 - Confirm no `agent:*-next` label remains
