@@ -64,9 +64,15 @@ _(none — all 8 tasks from the initial brief are in PRs, see Done below)_
 
 ---
 
+- [x] **Task 9 — Smart chart start date** | PR #7 `claude/smart-chart-start-date` | 2026-06-18
+  - On first load, chart defaults to the peak weight that started the current loss run
+  - Algorithm: walk back through monthly maxima; stop when gradient drops >1kg; find peak date
+  - Falls back to 3-month window when gaining
+  - Slider range still covers full history; user's manual position persisted via `chartRangeUserSet` flag
+  - Reviewed by Codex across 2 rounds; 4 issues found and fixed before merge
+
+---
+
 ## Human-Only Tasks (do not attempt unattended)
 
-- Merge PR #1 (`claude/ux-fixes-and-docs`) — chart, OMAD nav, multi-record, docs
-- Merge PR #2 (`claude/maths-and-goals`) — Last 30 Days sign fix, goals UX
-- Merge PR #3 (`claude/firebase-sync`) — Firebase sync + import script
-- Deploy to Fasthosts live site (`visibledotdot.com/weight.html`) after PRs merged
+- Deploy to Fasthosts live site (`visibledotdot.com/weight.html`) — includes all merged PRs #1–#7

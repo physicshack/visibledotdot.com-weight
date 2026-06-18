@@ -1,6 +1,6 @@
 # Spec — visible.. weight (V3)
 
-_Last updated: 2026-06-08. Maintained by Claude / Codex — update after each significant change._
+_Last updated: 2026-06-18. Maintained by Claude / Codex — update after each significant change._
 
 ---
 
@@ -96,14 +96,14 @@ Legacy entries without `time` are unaffected.
 
 ---
 
-## Firebase (planned, not yet implemented)
+## Firebase (live as of PR #3, 2026-06-08)
 
 See `CLAUDE.md` for Firebase project details.
 
-Planned path: `/health/{userId}/weight/`, `/health/{userId}/journal/`, `/health/{userId}/omad/`
+Path: `/health/{userId}/` — contains `weightData`, `journalData`, `omadFoods`, `prefs`
 
-Username-only auth (no login screen) — user types a name, data loads/saves under that path.
-David's data import target user: `davejfowler`.
+Username-only auth (no login screen) — user clicks Guest button, types a name, data loads/saves
+under that path. User `davejfowler` has 52 weight entries + 100+ journal entries imported.
 
 ---
 
@@ -123,7 +123,7 @@ David's data import target user: `davejfowler`.
 ### Known maths issues (pending review in task-queue)
 
 - **Sign inconsistency**: "Last 30 Days" uses `oldest − latest` (positive = good) while "Since Last" uses `latest − prev` (negative = good). Both display correctly with colour coding but the sign convention differs. Should be unified.
-- **Trend line visual**: OLS uses indices (equally spaced) rather than calendar days for the regression x-axis. After chart x-axis is fixed to `type: 'time'`, the two-point trend line will visually represent calendar time correctly.
+- **Trend line visual**: OLS uses indices (equally spaced) rather than calendar days for the regression x-axis. The chart x-axis is correctly `type: 'time'` so data points are spaced by real dates, but the trend endpoints are pinned to index 0 and index n−1, which means the line is visually accurate only when entries are evenly spaced.
 - **Goals DOM coupling**: `updateGoals()` reads `weeklyRateVal` text from the DOM using a regex. This is fragile — rate is formatted as `−0.52 kg/wk`. Works while the format is stable.
 
 ---
@@ -158,3 +158,5 @@ David's data import target user: `davejfowler`.
 |---|---|---|
 | V3 | 2026-06-08 | Repo created, backup imported |
 | V3.1 | 2026-06-08 | Chart x-axis fix, OMAD nav fix, multi-record/day support |
+| V3.2 | 2026-06-08 | Firebase sync live, username auth, davejfowler data imported |
+| V3.3 | 2026-06-18 | Smart chart start date — auto-detects peak weight for default view |
