@@ -602,11 +602,15 @@
   /* visible.. design system utilities */
   .bg-sunrise { background-image: var(--gradient-sunrise); }
   .shadow-glow { box-shadow: var(--shadow-glow); }
-  .text-sunrise {
-    background-image: var(--gradient-sunrise);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+  /* Fallback colour first; clipping applied only when oklch + background-clip are both supported */
+  .text-sunrise { color: #f59e0b; }
+  @supports (color: oklch(0 0 0)) and (-webkit-background-clip: text) {
+    .text-sunrise {
+      background-image: var(--gradient-sunrise);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
   }
   .horizon-divider { position: relative; }
   .horizon-divider::before {
@@ -624,6 +628,9 @@
     100% { transform: translateY(0);    opacity: 1; }
   }
   .animate-sun-rise { animation: sun-rise 2100ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-sun-rise { animation: none; }
+  }
   .visible-logo { display: flex; align-items: center; }
 </style>
 <!-- Firebase compat SDK (loaded sync so available when init() runs) -->
@@ -1359,6 +1366,7 @@ function bmiStatus(b) {
 // PAGE NAV
 // ═══════════════════════════════════════
 function replaySunRise(root = document) {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   root.querySelectorAll('.animate-sun-rise').forEach(el => {
     el.classList.remove('animate-sun-rise');
     void el.offsetWidth;
