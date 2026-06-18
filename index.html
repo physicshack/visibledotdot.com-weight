@@ -21,20 +21,36 @@
     --card-bg: #161929;
     --goal: #818cf8;
 
-    /* visible.. brand palette */
-    --fg:          oklch(0.93 0.012 248);
-    --surface-2:   oklch(0.27 0.026 264);
-    --muted-fg:    oklch(0.6 0.024 252);
-    --sunrise-core:  oklch(0.97 0.12 92);
-    --sunrise-warm:  oklch(0.85 0.17 65);
-    --sunrise-ember: oklch(0.72 0.18 45);
-    --sunrise-halo:  oklch(0.92 0.14 80);
-    --horizon-mint:  oklch(0.78 0.15 162);
+    /* visible.. brand palette — hex values as baseline, overridden by oklch below */
+    --fg:            #e8eaf0;
+    --surface-2:     #22263a;
+    --muted-fg:      #7a7f9a;
+    --sunrise-core:  #fde68a;
+    --sunrise-warm:  #f59e0b;
+    --sunrise-ember: #c2410c;
+    --sunrise-halo:  #fcd34d;
+    --horizon-mint:  #3dd68c;
     --gradient-sunrise: linear-gradient(135deg, var(--sunrise-core) 0%, var(--sunrise-warm) 45%, var(--sunrise-ember) 100%);
     --gradient-horizon: linear-gradient(90deg, transparent 0%, var(--horizon-mint) 18%, var(--horizon-mint) 82%, transparent 100%);
     --shadow-glow:
-      0 8px 24px -10px color-mix(in oklab, var(--sunrise-ember) 55%, transparent),
-      inset 0 0 0 1px color-mix(in oklab, var(--sunrise-warm) 25%, transparent);
+      0 8px 24px -10px rgba(194,65,12,0.55),
+      inset 0 0 0 1px rgba(245,158,11,0.25);
+  }
+
+  @supports (color: oklch(0 0 0)) {
+    :root {
+      --fg:            oklch(0.93 0.012 248);
+      --surface-2:     oklch(0.27 0.026 264);
+      --muted-fg:      oklch(0.6 0.024 252);
+      --sunrise-core:  oklch(0.97 0.12 92);
+      --sunrise-warm:  oklch(0.85 0.17 65);
+      --sunrise-ember: oklch(0.72 0.18 45);
+      --sunrise-halo:  oklch(0.92 0.14 80);
+      --horizon-mint:  oklch(0.78 0.15 162);
+      --shadow-glow:
+        0 8px 24px -10px color-mix(in oklab, var(--sunrise-ember) 55%, transparent),
+        inset 0 0 0 1px color-mix(in oklab, var(--sunrise-warm) 25%, transparent);
+    }
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
