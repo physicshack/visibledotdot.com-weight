@@ -69,6 +69,35 @@ _This section captures observations from Claude and Codex reviews. Codex: please
 - Quick inline weight entry on the Reset dashboard "Today" card — saves a tab navigation
 - Journal search box is easy to miss (top-right corner) — more prominent placement would help
 
+### OMAD Tool (from Claude, 2026-06-18)
+
+The overall structure is fine for a personal tool with a stable food list. Specific observations:
+
+**UX / interaction issues**
+- The `0` quantity buttons look like inactive counters, not interactive inputs. There is no `+`/`-`
+  affordance or label saying "portions" or "servings". A new user would not know to click them.
+- Serving sizes are fixed per food item (e.g. 150g chicken). You can say "2 portions" but not
+  "180g". For careful OMAD planning, per-gram flexibility would be valuable.
+- The food list is ~35 items across 7 categories with no filtering or search. This will become
+  unwieldy as the database grows.
+
+**Workflow issue**
+- No "repeat last meal" or saved meal template. OMAD meals tend to repeat. Re-entering quantities
+  from zero every day is significant friction — a one-tap "use yesterday's meal" would be a big win.
+
+**Layout**
+- The "Today's Meal" sidebar panel is sticky but mostly empty below the macro totals. A running
+  ingredient list (what has been added so far) would make that space useful and reduce errors.
+- The tab opens mid-list with no visible heading — a sticky category header or scroll-to-top
+  button would help orientation.
+
+**Suggested priority order for fixes:**
+1. Make quantity inputs obviously interactive (clearest UX issue)
+2. Repeat last meal shortcut (highest daily-use value)
+3. Category filter or search (scalability)
+4. Per-gram quantity option (precision)
+5. Running ingredient list in sidebar
+
 ### From Codex
 _(add findings here)_
 

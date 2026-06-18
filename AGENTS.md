@@ -31,7 +31,7 @@ Tone: calm, factual, never shaming. Same design philosophy as the finance app.
 | localStorage key | `weightTrackerData` |
 | Firebase project | `paymind-b1d51` (shared with finance app) |
 | Firebase URL | `https://paymind-b1d51-default-rtdb.europe-west1.firebasedatabase.app` |
-| Firebase path | `/health/{userId}/...` (planned, not yet implemented) |
+| Firebase path | `/health/{userId}/` — live, contains `weightData`, `journalData`, `omadFoods`, `prefs` |
 | App version | V3 |
 | Sandbox | `https://physicshack.github.io/visibledotdot.com-weight` |
 | Production | `https://visibledotdot.com/weight.html` (Fasthosts FTP) |
@@ -45,7 +45,7 @@ In order:
 
 1. `docs/ai-handoff.md` — current task, what's done, what's next
 2. `docs/spec.md` — full app spec, data schema, maths reference
-3. `docs/unattended-ai-workflow.md` — signalling convention, task queue, full execution rules
+3. `docs/unattended-ai-workflow.md` — signalling convention, merge gates, execution rules
 4. `README.md` — local dev, file structure, deployment (once created)
 
 ---
@@ -82,6 +82,27 @@ For handoff labels on PRs:
 - If Codex should act: remove `agent:claude-next`, add `agent:codex-next`
 - If human input required: add `agent:blocked`, clear agent-next labels
 - If no one needs to act: leave all handoff labels clear
+
+---
+
+## PR Review Gate Protocol
+
+Agent-next labels are **merge gates**, not notifications. Do not merge while any `agent:*-next` label is present.
+
+**Handoff labels:**
+- `agent:claude-next` — Claude must act before merge
+- `agent:codex-next` — Codex must act before merge
+- `agent:blocked` — human decision required; neither agent acts
+
+**Review outcomes** — the reviewing agent must post one of these in a comment AND remove their label:
+- `REVIEW-PASS` — changes look correct, ready for merge
+- `REVIEW-FINDINGS` — issues found (equivalent to REQUEST_CHANGES; list findings)
+- `REVIEW-BLOCKED` — a human-only decision is needed before work can continue
+
+**Before merging a PR:**
+- Confirm no `agent:*-next` label remains
+- Update the PR test plan — mark untested scenarios explicitly rather than leaving boxes unchecked
+- Update `docs/ai-handoff.md` after merge
 
 ---
 
