@@ -1223,6 +1223,7 @@ let sortDir = -1;
 let chartInstance = null;
 let chartRangeStart = 0, chartRangeEnd = 100;
 let chartRangeUserSet = false; // true only after the user manually moves the slider
+let chartSmartDefaultDone = false; // reset on user/data switch so auto-detect re-runs
 let chartRangePersistTimer = null;
 const STORAGE_KEY = 'weightTrackerData';
 
@@ -1653,10 +1654,11 @@ function renderChart() {
   const sorted = [...weightData].sort((a,b) => a.date.localeCompare(b.date));
   const n = sorted.length;
 
-  // Auto-detect smart start on first render — only when user hasn't manually set the slider
-  if (chartInstance === null && !chartRangeUserSet && n > 1) {
+  // Auto-detect smart start once per user/data load — only when user hasn't manually set the slider
+  if (!chartSmartDefaultDone && !chartRangeUserSet && n > 1) {
     chartRangeStart = computeSmartChartStart(sorted);
     document.getElementById('rangeStart').value = chartRangeStart;
+    chartSmartDefaultDone = true;
   }
 
   const si = Math.floor(chartRangeStart / 100 * (n - 1));
@@ -2414,7 +2416,10 @@ function currentBackup() {
     journalData,
     omadFoods,
     mealQtys,
-    trueStartKg
+    trueStartKg,
+    chartRangeStart,
+    chartRangeEnd,
+    chartRangeUserSet,
   };
 }
 
@@ -2429,6 +2434,13 @@ function applyLoadedData(data) {
   Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
   if (data.mealQtys && typeof data.mealQtys === 'object') Object.assign(mealQtys, data.mealQtys);
   trueStartKg = (typeof data.trueStartKg === 'number') ? data.trueStartKg : null;
+  // Restore chart range — only if user had explicitly set it (absent = legacy/unset)
+  if (data.chartRangeUserSet && typeof data.chartRangeStart === 'number') {
+    chartRangeStart = data.chartRangeStart;
+    chartRangeEnd = typeof data.chartRangeEnd === 'number' ? data.chartRangeEnd : 100;
+    chartRangeUserSet = true;
+    chartSmartDefaultDone = true;
+  }
   return true;
 }
 
@@ -2649,6 +2661,10 @@ async function setUser() {
     updateUserDisplay();
     return;
   }
+
+  // Reset smart-default state so auto-detect runs fresh for the new user's data
+  chartSmartDefaultDone = false;
+  chartRangeUserSet = false;
 
   const loaded = await loadFromFirebase();
   if (loaded) {
