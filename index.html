@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Weight Tracker V3</title>
+<title>visible.. weight</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><defs><radialGradient id='s' cx='0.5' cy='0.45' r='0.55'><stop offset='0%25' stop-color='%23fde68a'/><stop offset='60%25' stop-color='%23f59e0b'/><stop offset='100%25' stop-color='%23c2410c'/></radialGradient><clipPath id='c'><path d='M0 0 L40 0 L40 28 Q20 18 0 28 Z'/></clipPath></defs><rect width='40' height='40' rx='8' fill='%230f1117'/><circle cx='20' cy='20' r='7' fill='url(%23s)' clip-path='url(%23c)'/><path d='M 4 28 Q 20 18 36 28' fill='none' stroke='%233dd68c' stroke-width='2.2' stroke-linecap='round'/></svg>">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -19,6 +20,37 @@
     --muted: #7a7f9a;
     --card-bg: #161929;
     --goal: #818cf8;
+
+    /* visible.. brand palette — hex values as baseline, overridden by oklch below */
+    --fg:            #e8eaf0;
+    --surface-2:     #22263a;
+    --muted-fg:      #7a7f9a;
+    --sunrise-core:  #fde68a;
+    --sunrise-warm:  #f59e0b;
+    --sunrise-ember: #c2410c;
+    --sunrise-halo:  #fcd34d;
+    --horizon-mint:  #3dd68c;
+    --gradient-sunrise: linear-gradient(135deg, var(--sunrise-core) 0%, var(--sunrise-warm) 45%, var(--sunrise-ember) 100%);
+    --gradient-horizon: linear-gradient(90deg, transparent 0%, var(--horizon-mint) 18%, var(--horizon-mint) 82%, transparent 100%);
+    --shadow-glow:
+      0 8px 24px -10px rgba(194,65,12,0.55),
+      inset 0 0 0 1px rgba(245,158,11,0.25);
+  }
+
+  @supports (color: oklch(0 0 0)) {
+    :root {
+      --fg:            oklch(0.93 0.012 248);
+      --surface-2:     oklch(0.27 0.026 264);
+      --muted-fg:      oklch(0.6 0.024 252);
+      --sunrise-core:  oklch(0.97 0.12 92);
+      --sunrise-warm:  oklch(0.85 0.17 65);
+      --sunrise-ember: oklch(0.72 0.18 45);
+      --sunrise-halo:  oklch(0.92 0.14 80);
+      --horizon-mint:  oklch(0.78 0.15 162);
+      --shadow-glow:
+        0 8px 24px -10px color-mix(in oklab, var(--sunrise-ember) 55%, transparent),
+        inset 0 0 0 1px color-mix(in oklab, var(--sunrise-warm) 25%, transparent);
+    }
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -582,6 +614,40 @@
     .goal-section { grid-template-columns: 1fr; }
     .journal-form-grid { grid-template-columns: 1fr 1fr; }
   }
+
+  /* visible.. design system utilities */
+  .bg-sunrise { background-image: var(--gradient-sunrise); }
+  .shadow-glow { box-shadow: var(--shadow-glow); }
+  /* Fallback colour first; clipping applied only when oklch + background-clip are both supported */
+  .text-sunrise { color: #f59e0b; }
+  @supports (color: oklch(0 0 0)) and (-webkit-background-clip: text) {
+    .text-sunrise {
+      background-image: var(--gradient-sunrise);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+  }
+  .horizon-divider { position: relative; }
+  .horizon-divider::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background-image: var(--gradient-horizon);
+    opacity: 0.45;
+    pointer-events: none;
+  }
+  @keyframes sun-rise {
+    0%   { transform: translateY(16px); opacity: 0; }
+    35%  { opacity: 1; }
+    100% { transform: translateY(0);    opacity: 1; }
+  }
+  .animate-sun-rise { animation: sun-rise 2100ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-sun-rise { animation: none; }
+  }
+  .visible-logo { display: flex; align-items: center; }
 </style>
 <!-- Firebase compat SDK (loaded sync so available when init() runs) -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -590,8 +656,36 @@
 <body>
 
 <header>
-  <div class="logo">⚖ WeightTracker V3</div>
-  <nav>
+  <div class="visible-logo">
+    <svg viewBox="0 0 160 60" width="160" aria-label="visible.. weight">
+      <defs>
+        <radialGradient id="vSun" cx="0.5" cy="0.45" r="0.55">
+          <stop offset="0%"   stop-color="var(--sunrise-core)"/>
+          <stop offset="55%"  stop-color="var(--sunrise-warm)"/>
+          <stop offset="100%" stop-color="var(--sunrise-ember)"/>
+        </radialGradient>
+        <linearGradient id="vEdge" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0%"   stop-color="var(--horizon-mint)" stop-opacity="0"/>
+          <stop offset="15%"  stop-color="var(--horizon-mint)" stop-opacity="0.95"/>
+          <stop offset="85%"  stop-color="var(--horizon-mint)" stop-opacity="0.95"/>
+          <stop offset="100%" stop-color="var(--horizon-mint)" stop-opacity="0"/>
+        </linearGradient>
+        <clipPath id="vAbove">
+          <path d="M 0 0 L 160 0 L 160 52 Q 80 40 0 52 Z"/>
+        </clipPath>
+      </defs>
+      <text x="0" y="36" fill="var(--fg)"
+            style="font-family:'DM Sans',system-ui,sans-serif;font-weight:500;font-size:32px;letter-spacing:-0.02em;">
+        visible.
+      </text>
+      <g class="animate-sun-rise" style="transform-origin:109px 40px;">
+        <circle cx="109" cy="34" r="9.6" fill="var(--sunrise-halo)" opacity="0.18" clip-path="url(#vAbove)"/>
+        <circle cx="109" cy="34" r="4"   fill="url(#vSun)"           clip-path="url(#vAbove)"/>
+      </g>
+      <path d="M 2 52 Q 80 40 158 52" fill="none" stroke="url(#vEdge)" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <nav class="horizon-divider">
     <button class="active" onclick="showPage('reset')">Reset</button>
     <button onclick="showPage('tracker')">📈 Tracker</button>
     <button onclick="showPage('journal')">📓 Journal</button>
@@ -774,7 +868,7 @@
         <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">KG</label>
         <input type="number" id="entryKg" step="0.1" placeholder="e.g. 88.5" oninput="syncEntryFromKg()">
       </div>
-      <button class="btn" onclick="saveEntry()">Save</button>
+      <button class="btn bg-sunrise shadow-glow" style="color:var(--bg);" onclick="saveEntry()">Save</button>
     </div>
     <div id="entryMsg" style="font-size:12px; color:var(--accent); height:16px;"></div>
   </div>
@@ -865,7 +959,7 @@
       <label><input type="checkbox" id="jQuickWin"> Quick win</label>
     </div>
     <div class="row mt-12">
-      <button class="btn" onclick="saveJournal()">Save Entry</button>
+      <button class="btn bg-sunrise shadow-glow" style="color:var(--bg);" onclick="saveJournal()">Save Entry</button>
       <button class="btn btn-ghost" onclick="clearJournalForm()">Clear</button>
       <span id="jMsg" style="font-size:12px; color:var(--accent);"></span>
     </div>
@@ -1006,7 +1100,7 @@
 
       <div class="mt-12" id="omadSummary"></div>
 
-      <button class="btn mt-12" style="width:100%;" onclick="logMealToJournal()">📓 Log to Journal</button>
+      <button class="btn bg-sunrise shadow-glow mt-12" style="width:100%;color:var(--bg);" onclick="logMealToJournal()">📓 Log to Journal</button>
     </div>
   </div>
 </div>
@@ -1287,6 +1381,15 @@ function bmiStatus(b) {
 // ═══════════════════════════════════════
 // PAGE NAV
 // ═══════════════════════════════════════
+function replaySunRise(root = document) {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  root.querySelectorAll('.animate-sun-rise').forEach(el => {
+    el.classList.remove('animate-sun-rise');
+    void el.offsetWidth;
+    el.classList.add('animate-sun-rise');
+  });
+}
+
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
@@ -1295,6 +1398,7 @@ function showPage(id) {
   const navBtn = evt?.target?.closest?.('nav button') || document.querySelector(`nav button[onclick="showPage('${id}')"]`);
   if (navBtn) navBtn.classList.add('active');
   if (id === 'reset') renderReset();
+  replaySunRise();
 }
 
 function setUnit(u) {
@@ -1377,9 +1481,9 @@ function renderReset() {
 
   document.getElementById('resetHero').innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;">
-      <div><div class="stat-label">Reset Day</div><div class="stat-value">${resetDay}</div><div class="stat-sub">Started ${startDate}</div></div>
+      <div><div class="stat-label">Reset Day</div><div class="stat-value text-sunrise">${resetDay}</div><div class="stat-sub">Started ${startDate}</div></div>
       <div><div class="stat-label">Current Phase</div><div class="stat-value" style="color:var(--accent);">${esc(currentPhase.name)}</div><div class="stat-sub">${esc(currentPhase.note)}</div></div>
-      <div><div class="stat-label">Total Lost</div><div class="stat-value stat-good">${totalLoss.toFixed(1)} kg</div><div class="stat-sub">${fmtWeight(latest.kg, currentUnit)} now</div></div>
+      <div><div class="stat-label">Total Lost</div><div class="stat-value text-sunrise">${totalLoss.toFixed(1)} kg</div><div class="stat-sub">${fmtWeight(latest.kg, currentUnit)} now</div></div>
       <div><div class="stat-label">Target Gap</div><div class="stat-value">${toTarget.toFixed(1)} kg</div><div class="stat-sub">Target ${targetKg.toFixed(1)} kg</div></div>
     </div>`;
 
