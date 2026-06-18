@@ -1222,7 +1222,8 @@ let trueStartKg = null; // user-defined starting weight for Total Lost calculati
 let sortDir = -1;
 let chartInstance = null;
 let chartRangeStart = 0, chartRangeEnd = 100;
-let chartStartWasSet = false; // true when restored from saved prefs — skips auto-detect
+let chartRangeUserSet = false; // true only after the user manually moves the slider
+let chartRangePersistTimer = null;
 const STORAGE_KEY = 'weightTrackerData';
 
 function esc(value) {
@@ -1590,7 +1591,11 @@ function updateChartRange() {
     chartRangeStart = Math.max(0, chartRangeEnd - 5);
     document.getElementById('rangeStart').value = chartRangeStart;
   }
+  chartRangeUserSet = true;
   renderChart();
+  // Debounced save — only persists after slider stops moving for 500ms
+  clearTimeout(chartRangePersistTimer);
+  chartRangePersistTimer = setTimeout(() => persistAll(), 500);
 }
 
 // Returns a chartRangeStart percentage (0–100) representing the smart default
@@ -1648,11 +1653,10 @@ function renderChart() {
   const sorted = [...weightData].sort((a,b) => a.date.localeCompare(b.date));
   const n = sorted.length;
 
-  // Auto-detect smart start on first render (no saved pref, slider at default)
-  if (chartInstance === null && !chartStartWasSet && n > 1) {
+  // Auto-detect smart start on first render — only when user hasn't manually set the slider
+  if (chartInstance === null && !chartRangeUserSet && n > 1) {
     chartRangeStart = computeSmartChartStart(sorted);
     document.getElementById('rangeStart').value = chartRangeStart;
-    chartStartWasSet = true;
   }
 
   const si = Math.floor(chartRangeStart / 100 * (n - 1));
@@ -2534,7 +2538,10 @@ async function loadFromFirebase() {
     if (data.prefs) {
       const p = data.prefs;
       if (p.currentUnit) currentUnit = p.currentUnit;
-      if (typeof p.chartRangeStart === 'number') { chartRangeStart = p.chartRangeStart; chartStartWasSet = true; }
+      if (p.chartRangeUserSet && typeof p.chartRangeStart === 'number') {
+        chartRangeStart = p.chartRangeStart;
+        chartRangeUserSet = true;
+      }
       if (typeof p.chartRangeEnd === 'number') chartRangeEnd = p.chartRangeEnd;
       if (typeof p.trueStartKg === 'number') trueStartKg = p.trueStartKg;
       else trueStartKg = null;
@@ -2583,6 +2590,7 @@ function syncToFirebase() {
     currentUnit,
     chartRangeStart,
     chartRangeEnd,
+    chartRangeUserSet,
     trueStartKg: trueStartKg !== null ? trueStartKg : null,
     goalStart: goalStartEl ? goalStartEl.value : null,
     goalTarget: goalTargetEl ? goalTargetEl.value : null,
