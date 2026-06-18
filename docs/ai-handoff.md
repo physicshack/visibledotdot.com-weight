@@ -7,7 +7,7 @@ Always read this before doing any work. Update the Current Status section after 
 
 ## Current Status
 
-_Last updated: 2026-06-18 after PR #7 merge._
+_Last updated: 2026-06-18 after PR #9 merge._
 
 - App is live on GitHub Pages sandbox: `https://physicshack.github.io/visibledotdot.com-weight/`
 - Production deployment (`visibledotdot.com/weight.html`) is manual via Fasthosts FTP — not yet updated
@@ -18,11 +18,17 @@ _Last updated: 2026-06-18 after PR #7 merge._
 - No PWA manifest or service worker yet
 - No README yet
 
-### Recent changes (PR #7 — merged 2026-06-18)
-Smart chart start date: on first load the Weight Over Time chart now defaults to the
+### Recent changes (PR #9 — merged 2026-06-18)
+visible.. design system integration: new SVG logo with animated rising sun, sunrise/horizon
+CSS token palette (hex baselines + oklch overrides via @supports), sunrise gradient on the
+three primary commit buttons only (Save weight, Save Entry, Log to Journal), text-sunrise
+on Reset Day and Total Lost hero numbers, horizon-divider on nav, favicon updated, page
+title changed to "visible.. weight". Reduced-motion respected in CSS and JS.
+
+### PR #7 — merged 2026-06-18
+Smart chart start date: on first load the Weight Over Time chart defaults to the
 peak weight that initiated the current loss run, rather than all-time history. Falls back
 to a 3-month window when in a gaining phase. Slider still covers full history.
-See `docs/task-queue.md` for full history.
 
 ---
 
