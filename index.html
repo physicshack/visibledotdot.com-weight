@@ -1222,6 +1222,9 @@ let trueStartKg = null; // user-defined starting weight for Total Lost calculati
 let sortDir = -1;
 let chartInstance = null;
 let chartRangeStart = 0, chartRangeEnd = 100;
+let chartRangeUserSet = false; // true only after the user manually moves the slider
+let chartSmartDefaultDone = false; // reset on user/data switch so auto-detect re-runs
+let chartRangePersistTimer = null;
 const STORAGE_KEY = 'weightTrackerData';
 
 function esc(value) {
@@ -1589,13 +1592,75 @@ function updateChartRange() {
     chartRangeStart = Math.max(0, chartRangeEnd - 5);
     document.getElementById('rangeStart').value = chartRangeStart;
   }
+  chartRangeUserSet = true;
   renderChart();
+  // Debounced save — only persists after slider stops moving for 500ms
+  clearTimeout(chartRangePersistTimer);
+  chartRangePersistTimer = setTimeout(() => persistAll(), 500);
+}
+
+// Returns a chartRangeStart percentage (0–100) representing the smart default
+// start date: the peak that initiated the current loss run, or a 3-month
+// window when gaining. Only called on first render when no saved pref exists.
+function computeSmartChartStart(sorted) {
+  if (sorted.length < 2) return 0;
+
+  // Build monthly max: key = "YYYY-MM"
+  const monthlyMax = {};
+  sorted.forEach(d => {
+    const ym = d.date.slice(0, 7);
+    if (!monthlyMax[ym] || d.kg > monthlyMax[ym]) monthlyMax[ym] = d.kg;
+  });
+
+  const months = Object.keys(monthlyMax).sort().reverse(); // most-recent first
+  if (months.length < 2) return 0;
+
+  const currentMax = monthlyMax[months[0]];
+  const isGaining = months.every(m => monthlyMax[m] <= currentMax);
+
+  if (isGaining) {
+    // Show 3-month window
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 3);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const idx = sorted.findIndex(d => d.date >= cutoffStr);
+    return idx < 0 ? 0 : Math.round(idx / (sorted.length - 1) * 100);
+  }
+
+  // Walk back through months while monthly max keeps rising (still in peak zone).
+  // Stop when it drops by more than the noise threshold — we've gone past the peak.
+  const THRESHOLD_KG = 1.0;
+  let peakMonthIdx = 0;
+  for (let i = 1; i < months.length; i++) {
+    const rise = monthlyMax[months[i]] - monthlyMax[months[i - 1]];
+    if (rise < -THRESHOLD_KG) break;
+    peakMonthIdx = i;
+  }
+
+  // Find the actual highest entry on or after the start of the peak month
+  const peakRangeStart = months[peakMonthIdx] + '-01';
+  let peakEntry = null;
+  sorted.forEach(d => {
+    if (d.date >= peakRangeStart && (!peakEntry || d.kg > peakEntry.kg)) peakEntry = d;
+  });
+
+  if (!peakEntry) return 0;
+  const peakIdx = sorted.findIndex(d => d.date === peakEntry.date);
+  return Math.round(peakIdx / (sorted.length - 1) * 100);
 }
 
 function renderChart() {
   const unit = document.getElementById('chartUnit').value;
   const sorted = [...weightData].sort((a,b) => a.date.localeCompare(b.date));
   const n = sorted.length;
+
+  // Auto-detect smart start once per user/data load — only when user hasn't manually set the slider
+  if (!chartSmartDefaultDone && !chartRangeUserSet && n > 1) {
+    chartRangeStart = computeSmartChartStart(sorted);
+    document.getElementById('rangeStart').value = chartRangeStart;
+    chartSmartDefaultDone = true;
+  }
+
   const si = Math.floor(chartRangeStart / 100 * (n - 1));
   const ei = Math.min(n - 1, Math.floor(chartRangeEnd / 100 * (n - 1)));
   const slice = sorted.slice(si, ei + 1);
@@ -2351,7 +2416,10 @@ function currentBackup() {
     journalData,
     omadFoods,
     mealQtys,
-    trueStartKg
+    trueStartKg,
+    chartRangeStart,
+    chartRangeEnd,
+    chartRangeUserSet,
   };
 }
 
@@ -2366,6 +2434,13 @@ function applyLoadedData(data) {
   Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
   if (data.mealQtys && typeof data.mealQtys === 'object') Object.assign(mealQtys, data.mealQtys);
   trueStartKg = (typeof data.trueStartKg === 'number') ? data.trueStartKg : null;
+  // Restore chart range — only if user had explicitly set it (absent = legacy/unset)
+  if (data.chartRangeUserSet && typeof data.chartRangeStart === 'number') {
+    chartRangeStart = data.chartRangeStart;
+    chartRangeEnd = typeof data.chartRangeEnd === 'number' ? data.chartRangeEnd : 100;
+    chartRangeUserSet = true;
+    chartSmartDefaultDone = true;
+  }
   return true;
 }
 
@@ -2475,7 +2550,10 @@ async function loadFromFirebase() {
     if (data.prefs) {
       const p = data.prefs;
       if (p.currentUnit) currentUnit = p.currentUnit;
-      if (typeof p.chartRangeStart === 'number') chartRangeStart = p.chartRangeStart;
+      if (p.chartRangeUserSet && typeof p.chartRangeStart === 'number') {
+        chartRangeStart = p.chartRangeStart;
+        chartRangeUserSet = true;
+      }
       if (typeof p.chartRangeEnd === 'number') chartRangeEnd = p.chartRangeEnd;
       if (typeof p.trueStartKg === 'number') trueStartKg = p.trueStartKg;
       else trueStartKg = null;
@@ -2524,6 +2602,7 @@ function syncToFirebase() {
     currentUnit,
     chartRangeStart,
     chartRangeEnd,
+    chartRangeUserSet,
     trueStartKg: trueStartKg !== null ? trueStartKg : null,
     goalStart: goalStartEl ? goalStartEl.value : null,
     goalTarget: goalTargetEl ? goalTargetEl.value : null,
@@ -2582,6 +2661,10 @@ async function setUser() {
     updateUserDisplay();
     return;
   }
+
+  // Reset smart-default state so auto-detect runs fresh for the new user's data
+  chartSmartDefaultDone = false;
+  chartRangeUserSet = false;
 
   const loaded = await loadFromFirebase();
   if (loaded) {
