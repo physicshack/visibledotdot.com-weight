@@ -2190,6 +2190,7 @@ function clearJournalForm() {
   document.getElementById('jWeight').value = '';
   document.getElementById('jNotes').value = '';
   setCheckin();
+  pendingMealSnapshot = null;
 }
 
 function editJournal(date) {
@@ -2776,6 +2777,7 @@ const FIREBASE_URL = 'https://paymind-b1d51-default-rtdb.europe-west1.firebaseda
 let firebaseDB = null;
 let fbUser = localStorage.getItem('weightUser') || '';
 let fbSyncing = false;
+let pendingFbUser = '';
 
 function initFirebase() {
   if (typeof firebase === 'undefined') {
@@ -2921,12 +2923,15 @@ async function setUser() {
     document.getElementById('userModalMsg').textContent = '⚠ Username must contain letters or numbers.';
     return;
   }
-  fbUser = val;
-  localStorage.setItem('weightUser', fbUser);
   updateSyncBadge('Connecting…', 'var(--muted)');
   document.getElementById('userModalMsg').textContent = 'Connecting…';
 
+  // Temporarily use candidate username to probe Firebase — don't commit yet
+  const previousFbUser = fbUser;
+  fbUser = val;
+
   if (!initFirebase()) {
+    fbUser = previousFbUser; // rollback
     document.getElementById('userModalMsg').textContent = '⚠ Firebase unavailable — working offline.';
     updateSyncBadge('Offline', 'var(--accent3)');
     closeUserModal();
@@ -2939,6 +2944,8 @@ async function setUser() {
 
   const loaded = await loadFromFirebase();
   if (loaded) {
+    // Firebase has data — commit username and use it
+    localStorage.setItem('weightUser', fbUser);
     renderStats(); renderTable(); renderChart(); renderJournal(); renderOMAD(); updateGoals(); renderReset();
     await persistAll();
     document.getElementById('userModalMsg').textContent = `✓ Loaded ${weightData.length} weight entries from cloud.`;
@@ -2946,17 +2953,25 @@ async function setUser() {
     updateUserDisplay();
     setTimeout(closeUserModal, 1800);
   } else {
-    // No Firebase data for this username — ask instead of auto-uploading
+    // No Firebase data — roll back fbUser, hold candidate in pendingFbUser
+    pendingFbUser = val;
+    fbUser = previousFbUser;
+    updateUserDisplay();
     document.getElementById('userConnectView').style.display = 'none';
     document.getElementById('userNewAccountView').style.display = '';
-    document.getElementById('userNewName').textContent = fbUser;
+    document.getElementById('userNewName').textContent = pendingFbUser;
     document.getElementById('userModalMsg').textContent = '';
-    updateUserDisplay();
   }
 }
 
 function uploadCurrentData() {
+  // Commit the pending username now that user has explicitly chosen
+  fbUser = pendingFbUser;
+  pendingFbUser = '';
+  localStorage.setItem('weightUser', fbUser);
+  initFirebase();
   syncToFirebase();
+  updateUserDisplay();
   document.getElementById('userNewAccountView').style.display = 'none';
   document.getElementById('userConnectView').style.display = '';
   document.getElementById('userDangerZone').style.display = '';
@@ -2966,11 +2981,17 @@ function uploadCurrentData() {
 }
 
 function startFresh() {
+  // Commit the pending username now that user has explicitly chosen
+  fbUser = pendingFbUser;
+  pendingFbUser = '';
+  localStorage.setItem('weightUser', fbUser);
+  initFirebase();
   weightData = [];
   journalData = [];
   Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
   renderStats(); renderTable(); renderChart(); renderJournal(); renderOMAD(); updateGoals(); renderReset();
   persistAll();
+  updateUserDisplay();
   document.getElementById('userNewAccountView').style.display = 'none';
   document.getElementById('userConnectView').style.display = '';
   document.getElementById('userDangerZone').style.display = '';
@@ -2980,16 +3001,13 @@ function startFresh() {
 }
 
 function cancelNewAccount() {
-  fbUser = '';
-  firebaseDB = null;
-  localStorage.removeItem('weightUser');
-  updateUserDisplay();
-  updateSyncBadge('', 'var(--muted)');
+  // Discard pending username — fbUser is already rolled back to previous value
+  pendingFbUser = '';
   document.getElementById('userNewAccountView').style.display = 'none';
   document.getElementById('userConnectView').style.display = '';
-  document.getElementById('userDangerZone').style.display = 'none';
-  document.getElementById('userInput').value = '';
+  document.getElementById('userInput').value = fbUser;
   document.getElementById('userModalMsg').textContent = '';
+  updateUserDisplay();
 }
 
 function clearUser() {
