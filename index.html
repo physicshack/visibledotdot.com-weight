@@ -648,6 +648,51 @@
     .animate-sun-rise { animation: none; }
   }
   .visible-logo { display: flex; align-items: center; }
+
+  /* OMAD quantity steppers */
+  .qty-stepper { display: flex; align-items: center; gap: 6px; }
+  .qty-stepper button {
+    width: 28px; height: 28px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text); font-size: 16px; line-height: 1;
+    cursor: pointer; flex-shrink: 0; transition: border-color 0.15s, color 0.15s;
+  }
+  .qty-stepper button:hover { border-color: var(--accent); color: var(--accent); }
+  .qty-display { min-width: 28px; text-align: center; font-size: 14px; font-weight: 600; color: var(--muted); }
+  .qty-display.has-qty { color: var(--accent); }
+
+  /* OMAD category filter pills */
+  .omad-filter-pills { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 0 8px; }
+  .filter-pill {
+    padding: 4px 12px; border-radius: 20px;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--muted); font-size: 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .filter-pill:hover { border-color: var(--accent); color: var(--accent); }
+  .filter-pill.active { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 500; }
+
+  /* Recent meals panel */
+  .recent-meals-panel { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .recent-meals-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px; font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .meal-chips { display: flex; flex-direction: column; gap: 6px; }
+  .meal-chip {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface2); cursor: pointer; text-align: left;
+    transition: border-color 0.15s; width: 100%;
+  }
+  .meal-chip:hover { border-color: var(--accent); }
+  .meal-chip-date { font-size: 12px; color: var(--muted); }
+  .meal-chip-cal { font-size: 13px; font-weight: 600; color: var(--accent2); flex-shrink: 0; margin-left: 8px; }
+  .meal-chip-preview { font-size: 11px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+
+  /* Modal danger zone */
+  .danger-zone { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .danger-zone-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
 </style>
 <!-- Firebase compat SDK (loaded sync so available when init() runs) -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -724,17 +769,43 @@
     <div style="font-family:'DM Serif Display',serif; font-size:16px; color:var(--accent); margin-bottom:8px;">☁ Cloud Sync</div>
     <p style="font-size:12px; color:var(--muted); margin-bottom:16px; line-height:1.6;">
       Enter a username to sync your data across devices. No password — data is stored under your chosen name.<br>
-      <span style="color:var(--accent3);">⚠ Anyone who knows your username can read your data.</span>
+      <span style="color:var(--accent3);">⚠ Choose something non-guessable. Anyone who knows your username can read and overwrite your data.</span>
     </p>
     <input type="text" id="userInput" placeholder="e.g. davejfowler"
       style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:14px; margin-bottom:16px; box-sizing:border-box;"
       onkeydown="if(event.key==='Enter') setUser()">
-    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+
+    <!-- Default connect view -->
+    <div id="userConnectView" style="display:flex; gap:10px; flex-wrap:wrap;">
       <button class="btn btn-sm" onclick="setUser()">Connect</button>
-      <button class="btn btn-ghost btn-sm" onclick="clearUser()">Sign out (local only)</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearUser()">Sign out</button>
       <button class="btn btn-ghost btn-sm" onclick="closeUserModal()">Cancel</button>
     </div>
+
+    <!-- Shown when username has no Firebase data — choose upload or fresh start -->
+    <div id="userNewAccountView" style="display:none;">
+      <p style="font-size:12px; color:var(--text); margin-bottom:10px;">No cloud data found for <strong id="userNewName"></strong>. What would you like to do?</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-sm" onclick="uploadCurrentData()">Upload my current data</button>
+        <button class="btn btn-ghost btn-sm" onclick="startFresh()">Start fresh</button>
+        <button class="btn btn-ghost btn-sm" onclick="cancelNewAccount()">Cancel</button>
+      </div>
+    </div>
+
     <div id="userModalMsg" style="margin-top:12px; font-size:12px; color:var(--muted);"></div>
+
+    <!-- Danger zone — only shown when signed in -->
+    <div id="userDangerZone" class="danger-zone" style="display:none;">
+      <div class="danger-zone-title">Danger zone</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" style="color:var(--accent3); border-color:var(--accent3);" onclick="clearLocalData()">Clear local data</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--accent3); border-color:var(--accent3);" onclick="deleteAccount()">Delete account</button>
+      </div>
+      <p style="font-size:11px; color:var(--muted); margin-top:8px; line-height:1.5;">
+        <strong>Clear local:</strong> wipes this device only — cloud data safe.<br>
+        <strong>Delete account:</strong> permanently removes all cloud data. Irreversible.
+      </p>
+    </div>
   </div>
 </div>
 
@@ -2102,6 +2173,7 @@ function saveJournal() {
   const existing = journalData.findIndex(j => j.date === date);
   const rec = {date, day, comment, weight, notes};
   if (checkin) rec.checkin = checkin;
+  if (pendingMealSnapshot) { rec.mealSnapshot = pendingMealSnapshot; pendingMealSnapshot = null; }
   if (existing >= 0) journalData[existing] = rec;
   else journalData.push(rec);
   clearJournalForm();
@@ -2151,7 +2223,7 @@ function renderJournal() {
           <button class="delete-btn" id="jdel-${j.date}" onclick="event.stopPropagation();deleteJournal('${j.date}')">✕</button>
         </div>
       </div>
-      <div class="journal-text">${esc(j.comment)}</div>
+      ${j.comment ? `<div class="journal-text" style="color:var(--muted);font-size:12px;">${esc(shortText(j.comment, 80))}</div>` : ''}
       ${j.checkin ? `<div class="row mt-12" style="gap:6px;">
         ${j.checkin.omadKept ? '<span class="tag">OMAD</span>' : ''}
         ${j.checkin.alcohol ? '<span class="tag">Alcohol</span>' : ''}
@@ -2186,35 +2258,84 @@ function deleteJournal(date) {
 // OMAD
 // ═══════════════════════════════════════
 const mealQtys = {};
+let omadCatFilter = null;
+let omadMealsExpanded = false;
+let pendingMealSnapshot = null;
+const recentMealSnapshotsByDate = {};
 
 function renderOMAD() {
   const cats = [...new Set(omadFoods.map(f => f.cat))];
-  document.getElementById('omadFoodList').innerHTML = cats.map(cat => {
+
+  // Recent meals panel
+  const mealsWithSnap = journalData
+    .filter(j => j.mealSnapshot && j.mealSnapshot.length > 0)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  Object.keys(recentMealSnapshotsByDate).forEach(k => delete recentMealSnapshotsByDate[k]);
+  mealsWithSnap.forEach(j => { recentMealSnapshotsByDate[j.date] = j.mealSnapshot; });
+
+  let recentMealsHtml = '';
+  if (mealsWithSnap.length > 0) {
+    const shown = omadMealsExpanded ? mealsWithSnap : mealsWithSnap.slice(0, 5);
+    const chips = shown.map(j => {
+      const calMatch = j.comment.match(/\((\d+) cal\)/);
+      const cal = calMatch ? calMatch[1] : '?';
+      const preview = j.mealSnapshot.map(s => `${s.qty}× ${s.name}`).slice(0, 3).join(', ') + (j.mealSnapshot.length > 3 ? '…' : '');
+      return `
+        <button class="meal-chip" data-date="${j.date}" onclick="loadMealSnapshotByDate(this.dataset.date)">
+          <div>
+            <span class="meal-chip-date">${esc(j.day)} ${j.date}</span>
+            <div class="meal-chip-preview">${esc(preview)}</div>
+          </div>
+          <span class="meal-chip-cal">${cal} cal</span>
+        </button>`;
+    }).join('');
+    const toggleBtn = mealsWithSnap.length > 5
+      ? `<button class="btn btn-ghost btn-sm" onclick="toggleMealsExpanded()" style="font-size:11px;">${omadMealsExpanded ? '▲ Less' : `All (${mealsWithSnap.length})`}</button>`
+      : '';
+    recentMealsHtml = `
+      <div class="recent-meals-panel">
+        <div class="recent-meals-header"><span>Recent Meals</span>${toggleBtn}</div>
+        <div class="meal-chips">${chips}</div>
+      </div>`;
+  }
+
+  // Filter pills
+  const pillsHtml = `
+    <div class="omad-filter-pills">
+      <button class="filter-pill ${omadCatFilter === null ? 'active' : ''}" onclick="setOmadFilter(null)">All</button>
+      ${cats.map(cat => `<button class="filter-pill ${omadCatFilter === cat ? 'active' : ''}" data-cat="${esc(cat)}" onclick="setOmadFilter(this.dataset.cat)">${esc(cat)}</button>`).join('')}
+    </div>`;
+
+  // Food list — filtered when a category pill is active
+  const visibleCats = omadCatFilter ? cats.filter(c => c === omadCatFilter) : cats;
+  const foodListHtml = visibleCats.map(cat => {
     const items = omadFoods.filter(f => f.cat === cat);
     return `
       <div class="food-category">
         <div class="category-header">${esc(cat)}</div>
         ${items.map((f, fi) => {
           const key = `${cat}-${fi}`;
+          const qty = mealQtys[key] || 0;
+          const qtyStr = qty === 0 ? '0' : Number.isInteger(qty) ? String(qty) : qty.toFixed(1);
           return `
           <div class="food-item">
             <div>
               <div class="food-name">${esc(f.name)}</div>
               <div class="food-meta">${esc(f.serving)}</div>
             </div>
-            <div style="font-size:11px;color:var(--muted);">
-              P:${f.protein}g F:${f.fat}g C:${f.carbs}g
-            </div>
+            <div style="font-size:11px;color:var(--muted);">P:${f.protein}g F:${f.fat}g C:${f.carbs}g</div>
             <div class="food-cals">${f.cals} cal</div>
-            <input class="food-qty" type="number" min="0" step="0.5" placeholder="0"
-              id="qty-${key}"
-              value="${mealQtys[key] || ''}"
-              oninput="setQty('${key}', this.value); updateTotals()">
+            <div class="qty-stepper">
+              <button data-key="${esc(key)}" data-delta="-0.5" onclick="stepQtyFromEl(this)">−</button>
+              <span class="qty-display ${qty > 0 ? 'has-qty' : ''}" id="qty-display-${key}">${qtyStr}</span>
+              <button data-key="${esc(key)}" data-delta="0.5" onclick="stepQtyFromEl(this)">+</button>
+            </div>
           </div>`;
         }).join('')}
-      </div>
-    `;
+      </div>`;
   }).join('');
+
+  document.getElementById('omadFoodList').innerHTML = recentMealsHtml + pillsHtml + foodListHtml;
 }
 
 function setQty(key, val) {
@@ -2222,6 +2343,46 @@ function setQty(key, val) {
   if (!isNaN(v) && v > 0) mealQtys[key] = v;
   else delete mealQtys[key];
   persistAll();
+}
+
+function stepQtyFromEl(el) {
+  const key = el.dataset.key;
+  const delta = parseFloat(el.dataset.delta);
+  const current = mealQtys[key] || 0;
+  const next = Math.max(0, Math.round((current + delta) * 10) / 10);
+  if (next === 0) delete mealQtys[key];
+  else mealQtys[key] = next;
+  const display = document.getElementById('qty-display-' + key);
+  if (display) {
+    display.textContent = next === 0 ? '0' : Number.isInteger(next) ? String(next) : next.toFixed(1);
+    display.className = 'qty-display' + (next > 0 ? ' has-qty' : '');
+  }
+  updateTotals();
+  persistAll();
+}
+
+function setOmadFilter(cat) {
+  // pressing the already-active category pill cancels the filter
+  omadCatFilter = (cat !== null && cat === omadCatFilter) ? null : cat;
+  renderOMAD();
+  updateTotals();
+}
+
+function toggleMealsExpanded() {
+  omadMealsExpanded = !omadMealsExpanded;
+  renderOMAD();
+}
+
+function loadMealSnapshotByDate(date) {
+  const snap = recentMealSnapshotsByDate[date];
+  if (snap) loadMealSnapshot(snap);
+}
+
+function loadMealSnapshot(snapshot) {
+  Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
+  snapshot.forEach(({key, qty}) => { if (qty > 0) mealQtys[key] = qty; });
+  renderOMAD();
+  updateTotals();
 }
 
 function updateTotals() {
@@ -2262,7 +2423,7 @@ function updateTotals() {
 
 function clearMeal() {
   Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
-  document.querySelectorAll('.food-qty').forEach(el => el.value = '');
+  renderOMAD();
   updateTotals();
   persistAll();
 }
@@ -2270,16 +2431,21 @@ function clearMeal() {
 function logMealToJournal() {
   const cats = [...new Set(omadFoods.map(f => f.cat))];
   let items = [];
+  let snapshot = [];
   cats.forEach(cat => {
     omadFoods.filter(f => f.cat === cat).forEach((f, fi) => {
-      const el = document.getElementById(`qty-${cat}-${fi}`);
-      const qty = el ? parseFloat(el.value) || 0 : 0;
-      if (qty > 0) items.push(`${qty}× ${f.name} (${f.serving})`);
+      const key = `${cat}-${fi}`;
+      const qty = mealQtys[key] || 0;
+      if (qty > 0) {
+        items.push(`${qty}× ${f.name} (${f.serving})`);
+        snapshot.push({key, name: f.name, qty});
+      }
     });
   });
   if (!items.length) { alert('No items in meal.'); return; }
   const totCals = parseInt(document.getElementById('totCals').textContent);
   const summary = `OMAD Meal (${totCals} cal):\n` + items.join(', ');
+  pendingMealSnapshot = snapshot;
   document.getElementById('jDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('jComment').value = summary;
   showPage('journal');
@@ -2737,6 +2903,9 @@ function updateSyncBadge(msg, color) {
 function openUserModal() {
   document.getElementById('userInput').value = fbUser;
   document.getElementById('userModalMsg').textContent = fbUser ? `Currently signed in as: ${fbUser}` : '';
+  document.getElementById('userConnectView').style.display = '';
+  document.getElementById('userNewAccountView').style.display = 'none';
+  document.getElementById('userDangerZone').style.display = fbUser ? '' : 'none';
   document.getElementById('userModal').style.display = 'flex';
   setTimeout(() => document.getElementById('userInput').focus(), 100);
 }
@@ -2747,7 +2916,6 @@ function closeUserModal() {
 
 async function setUser() {
   const raw = document.getElementById('userInput').value.trim();
-  // Sanitise: lowercase, letters/digits/dash/underscore only
   const val = raw.toLowerCase().replace(/[^a-z0-9_-]/g, '');
   if (!val) {
     document.getElementById('userModalMsg').textContent = '⚠ Username must contain letters or numbers.';
@@ -2766,24 +2934,62 @@ async function setUser() {
     return;
   }
 
-  // Reset smart-default state so auto-detect runs fresh for the new user's data
   chartSmartDefaultDone = false;
   chartRangeUserSet = false;
 
   const loaded = await loadFromFirebase();
   if (loaded) {
-    // Firebase had data — use it as source of truth
     renderStats(); renderTable(); renderChart(); renderJournal(); renderOMAD(); updateGoals(); renderReset();
-    await persistAll(); // mirror to localStorage
+    await persistAll();
     document.getElementById('userModalMsg').textContent = `✓ Loaded ${weightData.length} weight entries from cloud.`;
     updateSyncBadge('☁ Loaded', 'var(--accent)');
+    updateUserDisplay();
+    setTimeout(closeUserModal, 1800);
   } else {
-    // New user — push local data up
-    syncToFirebase();
-    document.getElementById('userModalMsg').textContent = `New user created. Local data synced to cloud.`;
+    // No Firebase data for this username — ask instead of auto-uploading
+    document.getElementById('userConnectView').style.display = 'none';
+    document.getElementById('userNewAccountView').style.display = '';
+    document.getElementById('userNewName').textContent = fbUser;
+    document.getElementById('userModalMsg').textContent = '';
+    updateUserDisplay();
   }
-  updateUserDisplay();
+}
+
+function uploadCurrentData() {
+  syncToFirebase();
+  document.getElementById('userNewAccountView').style.display = 'none';
+  document.getElementById('userConnectView').style.display = '';
+  document.getElementById('userDangerZone').style.display = '';
+  document.getElementById('userModalMsg').textContent = 'Local data uploaded to cloud.';
+  updateSyncBadge('☁ Synced', 'var(--accent)');
   setTimeout(closeUserModal, 1800);
+}
+
+function startFresh() {
+  weightData = [];
+  journalData = [];
+  Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
+  renderStats(); renderTable(); renderChart(); renderJournal(); renderOMAD(); updateGoals(); renderReset();
+  persistAll();
+  document.getElementById('userNewAccountView').style.display = 'none';
+  document.getElementById('userConnectView').style.display = '';
+  document.getElementById('userDangerZone').style.display = '';
+  document.getElementById('userModalMsg').textContent = 'Started fresh. Sign in with your old username to restore previous data.';
+  updateSyncBadge('☁ Ready', 'var(--accent)');
+  setTimeout(closeUserModal, 2500);
+}
+
+function cancelNewAccount() {
+  fbUser = '';
+  firebaseDB = null;
+  localStorage.removeItem('weightUser');
+  updateUserDisplay();
+  updateSyncBadge('', 'var(--muted)');
+  document.getElementById('userNewAccountView').style.display = 'none';
+  document.getElementById('userConnectView').style.display = '';
+  document.getElementById('userDangerZone').style.display = 'none';
+  document.getElementById('userInput').value = '';
+  document.getElementById('userModalMsg').textContent = '';
 }
 
 function clearUser() {
@@ -2791,8 +2997,54 @@ function clearUser() {
   firebaseDB = null;
   localStorage.removeItem('weightUser');
   updateUserDisplay();
+  document.getElementById('userDangerZone').style.display = 'none';
   document.getElementById('userModalMsg').textContent = 'Signed out. Working from local storage only.';
   setTimeout(closeUserModal, 1500);
+}
+
+function clearLocalData() {
+  if (!confirm('Clear all data on this device? Your cloud data (if any) is untouched. This cannot be undone.')) return;
+  fbUser = '';
+  firebaseDB = null;
+  localStorage.removeItem('weightUser');
+  localStorage.removeItem(STORAGE_KEY);
+  weightData = [];
+  journalData = [];
+  Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
+  renderStats(); renderTable(); renderChart(); renderJournal(); renderOMAD(); updateGoals(); renderReset();
+  updateUserDisplay();
+  updateSyncBadge('', 'var(--muted)');
+  document.getElementById('userDangerZone').style.display = 'none';
+  document.getElementById('userModalMsg').textContent = 'Local data cleared. Sign in to reload from cloud.';
+  setTimeout(closeUserModal, 2000);
+}
+
+async function deleteAccount() {
+  if (!fbUser) return;
+  const typed = prompt(`This permanently deletes all cloud data for "${fbUser}".\n\nType your username to confirm:`);
+  if (typed !== fbUser) {
+    if (typed !== null) document.getElementById('userModalMsg').textContent = '⚠ Username did not match — account not deleted.';
+    return;
+  }
+  document.getElementById('userModalMsg').textContent = 'Deleting…';
+  try {
+    await firebaseDB.ref(`/health/${fbUser}`).remove();
+    fbUser = '';
+    firebaseDB = null;
+    localStorage.removeItem('weightUser');
+    localStorage.removeItem(STORAGE_KEY);
+    weightData = [];
+    journalData = [];
+    Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
+    renderStats(); renderTable(); renderChart(); renderJournal(); renderOMAD(); updateGoals(); renderReset();
+    updateUserDisplay();
+    updateSyncBadge('', 'var(--muted)');
+    document.getElementById('userDangerZone').style.display = 'none';
+    document.getElementById('userModalMsg').textContent = '✓ Account deleted. All cloud data removed.';
+    setTimeout(closeUserModal, 2000);
+  } catch(e) {
+    document.getElementById('userModalMsg').textContent = '⚠ Delete failed — check connection and try again.';
+  }
 }
 
 function updateUserDisplay() {
