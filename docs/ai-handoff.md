@@ -7,7 +7,7 @@ Always read this before doing any work. Update the Current Status section after 
 
 ## Current Status
 
-_Last updated: 2026-06-18 after PR #9 merge._
+_Last updated: 2026-06-19 after PR #9 merge._
 
 - App is live on GitHub Pages sandbox: `https://physicshack.github.io/visibledotdot.com-weight/`
 - Production deployment (`visibledotdot.com/weight.html`) is manual via Fasthosts FTP — not yet updated
@@ -34,13 +34,84 @@ to a 3-month window when in a gaining phase. Slider still covers full history.
 
 ## What's Next
 
-Suggested priorities (in order):
+Priority order agreed with Dave (2026-06-19):
 
-1. **Add README** — local dev, file structure, deployment instructions
-2. **Deploy PRs to production** — Fasthosts FTP, human must action
-3. **OMAD tool UX improvements** — quantity inputs, repeat-meal shortcut, search/filter (see feedback section below)
-4. **PWA setup** — manifest, icons, service worker
+1. **PR #10 — OMAD UX + Firebase user management** (in progress, branch: `claude/omad-and-user-management`)
+   - See full spec below
+2. **Deploy to production** — Fasthosts FTP, human must action after each merged PR
+3. **PWA setup** — manifest, icons, service worker
+4. **Add README** — local dev, file structure, deployment instructions
 5. **Shared journal** — connect journal entries to the finance app (see sibling repo)
+
+**Bigger lift / later:**
+- Reset tab hierarchy reorder (today's status first, state check second, quick inline weight log)
+- Tracker tab: chart as hero, stat cards as horizontal scroll strip
+- Journal tab: collapsed entry form, dot-scale tap inputs for ratings
+- Nav: bottom tab bar pattern, settings drawer for Guest/Export/Import/unit toggle
+
+---
+
+## Next PR Spec — OMAD UX + Firebase User Management
+
+### OMAD Tool changes
+
+**1. Quantity steppers (0.5 increments)**
+Replace the current bare `0` click-counter buttons with explicit `−` / `+` buttons either side
+of the quantity display. Step size: 0.5. Show one decimal place when non-integer (e.g. `1.5`),
+whole number when integer (e.g. `2`). Minimum: 0. No maximum enforced.
+
+**2. Last meals panel — top 5 + full history**
+Above the food list, add a "Recent Meals" row showing the last 5 logged meals as selectable
+chips/cards (date + calorie total). Tapping one fills all quantities from that meal.
+A "Show all" control expands to a scrollable list of all logged meals. Meal history is derived
+from journal entries that contain OMAD macro data (already stored via "Log to Journal").
+
+**3. Category filter pills**
+Horizontal pill bar above the food list. Pills: All (default active) + one per category
+(Poultry & Meats, Indian, Seafood, etc. — derived from the food data, not hardcoded).
+Default state: All selected, full list visible. Pressing a category pill filters to that
+category only. Pressing the active pill again cancels the filter (returns to All).
+Only one category active at a time. Pills are cancellable — pressing the active non-All
+pill deselects it and returns to All.
+
+### Journal changes
+
+**4. Entry text previews**
+Each journal entry row currently shows only `Day · YYYY-MM-DD`. Add a subtitle line showing
+the first ~12 words of the entry text field, truncated with ellipsis. If no entry text,
+show nothing (don't show a blank subtitle row). Style: muted, smaller than the date.
+
+### Firebase user management changes
+
+**5. Fix: user-switch silent data upload**
+Bug: when a user types a new username and Firebase has no data for that path, the app
+currently calls `syncToFirebase()` silently, pushing the current user's local data to the
+new username's Firebase path. This is a data exposure risk (e.g. typing "guest" creates a
+copy of the real user's data at `/health/guest/`).
+
+Fix: on interactive username switch (`setUsername()`), if Firebase returns no data for the
+new path, show a confirmation modal:
+- "No cloud data found for '[username]'. What would you like to do?"
+- [Upload my current data to this account] — existing behaviour, now explicit
+- [Start fresh — clear local data] — wipes localStorage, starts empty
+Do NOT call `syncToFirebase()` automatically. This does not affect the on-startup reconnect
+path (`init()`) which can continue to auto-push for genuine new account creation.
+
+**6. Clear local data action**
+Add to the username modal (below the sign-out option, in a "Danger zone" section):
+"Clear local data" — wipes `weightTrackerData` from localStorage and signs out.
+Firebase data is untouched. Requires a single confirmation click ("Are you sure?").
+Use case: device-local cache is stale or wrong; re-signing in will repopulate from Firebase.
+
+**7. Delete account action**
+Add to the username modal danger zone:
+"Delete account" — deletes `/health/{userId}/` from Firebase AND clears localStorage AND
+signs out. Permanent and irreversible. Requires the user to type their username to confirm
+before the delete fires. Only available when signed in (fbUser is set).
+
+**8. Username modal copy**
+Add to the existing warning text: "Choose something non-guessable — anyone who knows your
+username can read and overwrite your data."
 
 ---
 
@@ -62,11 +133,9 @@ _This section captures observations from Claude and Codex reviews. Codex: please
 
 **UX improvements**
 - Journal entry rows show no content preview — just `Sat · 2026-05-23` with no text hint.
-  Even 10 words of the entry as a subtitle would help scanning 102+ entries.
+  Even 12 words of the entry as a subtitle would help scanning 102+ entries. _(spec'd for next PR)_
 - "Today" card on Reset tab is mostly empty (just one button). Could show today's log status
   inline: did you log weight? OMAD kept today?
-- OMAD Tool tab opens mid-list with no visible heading. A sticky category header or scroll-to-top
-  would help orientation.
 - The right side of the nav bar (Guest, Export, Import, St/Lb) feels tight at ~960px and will
   likely overflow on real mobile (~375px).
 
@@ -74,35 +143,6 @@ _This section captures observations from Claude and Codex reviews. Codex: please
 - OMAD adherence streak indicator on Reset dashboard — simple, motivating
 - Quick inline weight entry on the Reset dashboard "Today" card — saves a tab navigation
 - Journal search box is easy to miss (top-right corner) — more prominent placement would help
-
-### OMAD Tool (from Claude, 2026-06-18)
-
-The overall structure is fine for a personal tool with a stable food list. Specific observations:
-
-**UX / interaction issues**
-- The `0` quantity buttons look like inactive counters, not interactive inputs. There is no `+`/`-`
-  affordance or label saying "portions" or "servings". A new user would not know to click them.
-- Serving sizes are fixed per food item (e.g. 150g chicken). You can say "2 portions" but not
-  "180g". For careful OMAD planning, per-gram flexibility would be valuable.
-- The food list is ~35 items across 7 categories with no filtering or search. This will become
-  unwieldy as the database grows.
-
-**Workflow issue**
-- No "repeat last meal" or saved meal template. OMAD meals tend to repeat. Re-entering quantities
-  from zero every day is significant friction — a one-tap "use yesterday's meal" would be a big win.
-
-**Layout**
-- The "Today's Meal" sidebar panel is sticky but mostly empty below the macro totals. A running
-  ingredient list (what has been added so far) would make that space useful and reduce errors.
-- The tab opens mid-list with no visible heading — a sticky category header or scroll-to-top
-  button would help orientation.
-
-**Suggested priority order for fixes:**
-1. Make quantity inputs obviously interactive (clearest UX issue)
-2. Repeat last meal shortcut (highest daily-use value)
-3. Category filter or search (scalability)
-4. Per-gram quantity option (precision)
-5. Running ingredient list in sidebar
 
 ### From Codex
 _(add findings here)_

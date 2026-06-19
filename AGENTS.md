@@ -116,6 +116,15 @@ Never do these without explicit instruction:
 - Push directly to `main`
 - Deploy to Fasthosts without human instruction
 - Rewrite large sections of the app to fix small problems
+- Call `syncToFirebase()` automatically on an interactive username switch — this silently copies
+  the current user's data to the new Firebase path (known bug, fix spec'd in `docs/ai-handoff.md`)
+
+---
+
+## Firebase Security Model
+
+Username-as-password: anyone who knows a username can read and write that Firebase path.
+The fix for the silent user-switch data upload is part of the next PR (see `docs/ai-handoff.md`).
 
 ---
 
