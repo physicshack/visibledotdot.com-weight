@@ -225,6 +225,7 @@
     transition: left 0.6s ease;
     box-shadow: 0 0 6px rgba(255,255,255,0.5);
   }
+  .journal-entry.editing { outline: 1px solid var(--accent2); }
   .bmi-labels {
     display: flex;
     justify-content: space-between;
@@ -1148,7 +1149,7 @@
         <div class="calorie-gauge"><div class="calorie-fill" id="calGauge" style="width:0%"></div></div>
         <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--muted);">
           <span>0</span>
-          <span>Target: <input type="number" id="calTarget" value="1500" style="width:60px; padding:2px 6px; font-size:11px; background:var(--surface2); border:1px solid var(--border); border-radius:4px; color:var(--text);" oninput="updateTotals()"></span>
+          <span>Target: <input type="number" id="calTarget" value="1500" style="width:60px; padding:2px 6px; font-size:11px; background:var(--surface2); border:1px solid var(--border); border-radius:4px; color:var(--text);" oninput="updateTotals(); scheduleGoalPersist()"></span>
           <span id="calTargetLabel">1500</span>
         </div>
       </div>
@@ -1724,12 +1725,15 @@ function showPage(id) {
   replaySunRise();
 }
 
+function syncUnitToggle() {
+  document.querySelectorAll('.unit-toggle button').forEach(b => b.classList.toggle('active', b.getAttribute('onclick') === `setUnit('${currentUnit}')`));
+  document.getElementById('chartUnit').value = currentUnit === 'kg' ? 'kg' : 'stone';
+}
+
 function setUnit(u) {
   currentUnit = u;
-  document.querySelectorAll('.unit-toggle button').forEach(b => b.classList.remove('active'));
-  const evt = typeof event !== 'undefined' ? event : null;
-  if (evt?.target) evt.target.classList.add('active');
-  document.getElementById('chartUnit').value = u === 'kg' ? 'kg' : 'stone';
+  syncUnitToggle();
+  persistAll();
   renderStats();
   renderTable();
   renderChart();
@@ -2774,7 +2778,7 @@ function confirmFoodDelete(i) {
   const cell = document.getElementById('fdel-' + i);
   if (!cell) return;
   cell.innerHTML = `<span style="font-size:11px;color:var(--accent3);">Sure?</span>
-    <button class="delete-btn" style="color:var(--accent3);font-weight:700;" onclick="deleteFoodItem(\${i})">Yes</button>
+    <button class="delete-btn" style="color:var(--accent3);font-weight:700;" onclick="deleteFoodItem(${i})">Yes</button>
     <button class="delete-btn" onclick="renderFoodEditorTable()">No</button>`;
 }
 
@@ -2797,8 +2801,25 @@ function editFoodInline(i) {
   `;
 }
 
+// mealQtys keys are `${cat}-${indexWithinCategory}`; editing/deleting a food shifts them.
+// Capture qty per food object before the change and re-key afterwards.
+function mutateFoods(fn) {
+  const qtyByFood = new Map();
+  omadFoods.forEach(f => { const q = mealQtys[foodKeyFor(f)]; if (q > 0) qtyByFood.set(f, q); });
+  const replaced = fn(); // may return [oldFood, newFood]
+  if (replaced && qtyByFood.has(replaced[0])) { qtyByFood.set(replaced[1], qtyByFood.get(replaced[0])); qtyByFood.delete(replaced[0]); }
+  Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
+  qtyByFood.forEach((q, f) => { if (omadFoods.includes(f)) mealQtys[foodKeyFor(f)] = q; });
+}
+
 function saveFoodEdit(i) {
-  omadFoods[i] = {
+  mutateFoods(() => { const old = omadFoods[i]; omadFoods[i] = readFoodEdit(i); return [old, omadFoods[i]]; });
+  renderFoodEditorTable();
+  refreshCatSuggestions();
+}
+
+function readFoodEdit(i) {
+  return {
     cat: document.getElementById(`ef-cat-${i}`).value.trim().toUpperCase(),
     name: document.getElementById(`ef-name-${i}`).value.trim(),
     serving: document.getElementById(`ef-serving-${i}`).value.trim(),
@@ -2808,12 +2829,10 @@ function saveFoodEdit(i) {
     carbs: parseFloat(document.getElementById(`ef-carbs-${i}`).value) || 0,
     fibre: parseFloat(document.getElementById(`ef-fibre-${i}`).value) || 0,
   };
-  renderFoodEditorTable();
-  refreshCatSuggestions();
 }
 
 function deleteFoodItem(i) {
-  omadFoods.splice(i, 1);
+  mutateFoods(() => { omadFoods.splice(i, 1); });
   renderFoodEditorTable();
   refreshCatSuggestions();
 }
@@ -2831,7 +2850,7 @@ function addFoodItem() {
     document.getElementById('foodEditorMsg').textContent = '⚠ Category and name required.';
     return;
   }
-  omadFoods.push({cat, name, serving, cals, protein, fat, carbs, fibre});
+  mutateFoods(() => { omadFoods.push({cat, name, serving, cals, protein, fat, carbs, fibre}); });
   // Clear form
   ['newFoodCat','newFoodName','newFoodServing','newFoodCals','newFoodProtein','newFoodFat','newFoodCarbs','newFoodFibre']
     .forEach(id => document.getElementById(id).value = '');
@@ -2973,7 +2992,25 @@ function currentBackup() {
     chartRangeStart,
     chartRangeEnd,
     chartRangeUserSet,
+    currentUnit,
+    goalStart: document.getElementById('goalStart')?.value || '',
+    goalTarget: document.getElementById('goalTarget')?.value || '',
+    calTarget: document.getElementById('calTarget')?.value || '',
   };
+}
+
+let goalPersistTimer = null;
+function scheduleGoalPersist() {
+  clearTimeout(goalPersistTimer);
+  goalPersistTimer = setTimeout(() => persistAll(), 600);
+}
+
+function applyGoalPrefs(p) {
+  const gs = document.getElementById('goalStart'), gt = document.getElementById('goalTarget'), ct = document.getElementById('calTarget');
+  if (p.goalStart && gs) gs.value = p.goalStart;
+  if (p.goalTarget && gt) gt.value = p.goalTarget;
+  if (p.calTarget && ct) ct.value = p.calTarget;
+  if (p.currentUnit === 'kg' || p.currentUnit === 'st') { currentUnit = p.currentUnit; syncUnitToggle(); }
 }
 
 function applyLoadedData(data) {
@@ -2988,6 +3025,7 @@ function applyLoadedData(data) {
   Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
   if (data.mealQtys && typeof data.mealQtys === 'object') Object.assign(mealQtys, data.mealQtys);
   trueStartKg = (typeof data.trueStartKg === 'number') ? data.trueStartKg : null;
+  applyGoalPrefs(data);
   // Restore chart range — only if user had explicitly set it (absent = legacy/unset)
   if (data.chartRangeUserSet && typeof data.chartRangeStart === 'number') {
     chartRangeStart = data.chartRangeStart;
@@ -3060,6 +3098,7 @@ const FIREBASE_URL = 'https://paymind-b1d51-default-rtdb.europe-west1.firebaseda
 let firebaseDB = null;
 let fbUser = localStorage.getItem('weightUser') || '';
 let fbSyncing = false;
+let fbSyncAgain = false; // a change arrived while a sync was in flight
 let pendingFbUser = '';
 
 function initFirebase() {
@@ -3121,16 +3160,8 @@ async function loadFromFirebase() {
           Object.assign(mealQtys, mq);
         } catch(e) {}
       }
-      // Restore goal inputs after DOM is ready
-      if (p.goalStart || p.goalTarget) {
-        setTimeout(() => {
-          const gs = document.getElementById('goalStart');
-          const gt = document.getElementById('goalTarget');
-          if (gs && !gs.value && p.goalStart) gs.value = p.goalStart;
-          if (gt && !gt.value && p.goalTarget) gt.value = p.goalTarget;
-          updateGoals();
-        }, 200);
-      }
+      if (p.chartRangeUserSet) chartSmartDefaultDone = true;
+      applyGoalPrefs(p);
     }
     return true;
   } catch (e) {
@@ -3140,8 +3171,10 @@ async function loadFromFirebase() {
 }
 
 function syncToFirebase() {
-  if (!firebaseDB || !fbUser || fbSyncing) return;
+  if (!firebaseDB || !fbUser) return;
+  if (fbSyncing) { fbSyncAgain = true; return; }
   fbSyncing = true;
+  fbSyncAgain = false;
   // Arrays must be keyed objects in Firebase (no arrays allowed)
   // Keyed by record id (was: journal by date, so same-day entries collapsed to one on sync).
   const weightObj = toKeyedObject(weightData);
@@ -3159,12 +3192,14 @@ function syncToFirebase() {
     trueStartKg: trueStartKg !== null ? trueStartKg : null,
     goalStart: goalStartEl ? goalStartEl.value : null,
     goalTarget: goalTargetEl ? goalTargetEl.value : null,
+    calTarget: document.getElementById('calTarget')?.value || null,
     mealQtys: JSON.stringify(mealQtys),
   };
   firebaseDB.ref(`/health/${fbUser}`).set({ weightData: weightObj, journalData: journalObj, omadFoods: omadObj, prefs })
     .then(() => {
       fbSyncing = false;
       updateSyncBadge('☁ Synced', 'var(--accent)');
+      if (fbSyncAgain) syncToFirebase();
     })
     .catch(e => {
       fbSyncing = false;
@@ -3261,6 +3296,13 @@ function uploadCurrentData() {
   setTimeout(closeUserModal, 1800);
 }
 
+function resetViewState() {
+  ['goalStart', 'goalTarget'].forEach(id => { document.getElementById(id).value = ''; });
+  trueStartKg = null;
+  chartRangeStart = 0; chartRangeEnd = 100; chartRangeUserSet = false; chartSmartDefaultDone = false;
+  editingJournalId = null;
+}
+
 function startFresh() {
   // Commit the pending username now that user has explicitly chosen
   fbUser = pendingFbUser;
@@ -3269,6 +3311,7 @@ function startFresh() {
   initFirebase();
   weightData = [];
   journalData = [];
+  resetViewState();
   Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
   renderStats(); renderTable(); renderChart(); renderJournal(); renderOMAD(); updateGoals(); renderReset();
   persistAll();
@@ -3309,6 +3352,7 @@ function clearLocalData() {
   localStorage.removeItem(STORAGE_KEY);
   weightData = [];
   journalData = [];
+  resetViewState();
   Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
   renderStats(); renderTable(); renderChart(); renderJournal(); renderOMAD(); updateGoals(); renderReset();
   updateUserDisplay();
@@ -3334,6 +3378,7 @@ async function deleteAccount() {
     localStorage.removeItem(STORAGE_KEY);
     weightData = [];
     journalData = [];
+    resetViewState();
     Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
     renderStats(); renderTable(); renderChart(); renderJournal(); renderOMAD(); updateGoals(); renderReset();
     updateUserDisplay();
