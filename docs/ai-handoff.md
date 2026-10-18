@@ -7,18 +7,37 @@ Always read this before doing any work. Update the Current Status section after 
 
 ## Current Status
 
-_Last updated: 2026-06-19 after PR #9 merge._
+_Last updated: 2026-10-18 after PR #11 (maths/graph/journal audit)._
 
-- App is live on GitHub Pages sandbox: `https://physicshack.github.io/visibledotdot.com-weight/`
-- Production deployment (`visibledotdot.com/weight.html`) is manual via Fasthosts FTP — not yet updated
-- Firebase sync is live: username-only auth, data at `/health/{userId}/`
-- User `davejfowler` has 52 weight entries + 102+ journal entries in Firebase
-- localStorage key: `weightTrackerData` (also used as Firebase export mirror)
-- No automated tests
-- No PWA manifest or service worker yet
-- No README yet
+- Sandbox (GitHub Pages, auto-deploys from `main`): `https://physicshack.github.io/visibledotdot.com-weight/`
+- Production `https://visibledotdot.com/weight.html` is **behind main**: it is an older, localStorage-only
+  build (114 KB, no Firebase). David uploads by FTP; see `README.md` → Deploy.
+- Firebase sync is live: username-only "login", data at `/health/{userId}/`, written with `.set()`.
+- localStorage key: `weightTrackerData`, schema **v4** (unique-id records, migration from v3 on load)
+- Tests: `node tests/run-tests.js`, `python3 tests/independent_check.py`, `python3 tests/browser_check.py`
+- README now exists (files, data model, maths, deploy)
 
-### Recent changes (PR #9 — merged 2026-06-18)
+### PR #11 (2026-10-18): audit — maths, graph, projection + multi-entry journal
+- Journal saves never overwrite: every record has a unique id; unlimited entries per day; per-entry
+  edit/delete; lossless v3 → v4 migration (deterministic legacy ids); Firebase keyed by id.
+- Trend = OLS on real days over daily means (was on entry index). Projection continues the trend
+  line from its end point (was drawn from the first point to goal date + 7 days).
+- Stats: same-day ordering by time, consistent Total Lost baseline, Last 30 Days window, local dates.
+- Graph: y axis padded around every plotted value with st+lb ticks, x padding, axis titles.
+- Sliders re-synced to stored values; goals/unit/calorie target persisted locally.
+- Food delete fixed (SyntaxError), meal quantities re-keyed on food edits, Firebase sync queue.
+
+### Open items needing a human decision (not changed by the audit)
+- **Privacy:** David's real weight history and personal journal are hard-coded as default data in
+  `index.html`. Anyone opening the page with empty storage (or GitHub Pages) sees them, and a new user
+  who picks "Upload my current data" copies them into their own account.
+- **Firebase security:** open read/write by username (rules are managed in the console); `.set()` of
+  the whole user path is last-writer-wins between devices.
+- **First v4 save restructures a user's Firebase path** (journal keyed by id instead of date). Old
+  date-keyed data still loads, but an *old* build that syncs afterwards would collapse same-day
+  entries again, so retire old tabs and builds.
+
+### PR #9 — merged 2026-06-18
 visible.. design system integration: new SVG logo with animated rising sun, sunrise/horizon
 CSS token palette (hex baselines + oklch overrides via @supports), sunrise gradient on the
 three primary commit buttons only (Save weight, Save Entry, Log to Journal), text-sunrise
@@ -40,7 +59,6 @@ Priority order agreed with Dave (2026-06-19):
    - See full spec below
 2. **Deploy to production** — Fasthosts FTP, human must action after each merged PR
 3. **PWA setup** — manifest, icons, service worker
-4. **Add README** — local dev, file structure, deployment instructions
 5. **Shared journal** — connect journal entries to the finance app (see sibling repo)
 
 **Bigger lift / later:**
@@ -122,13 +140,13 @@ _This section captures observations from Claude and Codex reviews. Codex: please
 ### From Claude (2026-06-18 app review)
 
 **Bugs / data issues**
-- "Last 30 Days" shows 0.0 kg / 0 readings — most recent entry is 52 days old so the window is
+- _(fixed 2026-10-18: card now says when the last reading was)_ "Last 30 Days" shows 0.0 kg / 0 readings — most recent entry is 52 days old so the window is
   working correctly, but the card gives no indication of this. Should say something like
   "last entry: 52 days ago" rather than silently showing zero.
 - "State Check" dashes on Reset tab (OMAD Kept, Food Noise, Energy, Alcohol Days all `—`)
   despite 102 journal entries. Likely a date-range or calculation bug — data exists but isn't
   being surfaced.
-- Weekly Rate (Trend) shows 0.00 kg/wk despite 7.1 kg total lost — possibly because the
+- _(fixed 2026-10-18: trend is time-based; also Total Lost 7.1 kg was a 2008 baseline)_ Weekly Rate (Trend) shows 0.00 kg/wk despite 7.1 kg total lost — possibly because the
   chart's visible slice (post smart-start fix) needs more recent data points to calculate slope.
 
 **UX improvements**

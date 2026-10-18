@@ -73,6 +73,14 @@ _(none — all 8 tasks from the initial brief are in PRs, see Done below)_
 
 ---
 
+- [x] **Audit: maths, graph scales, sliders, projection + multi-entry journal** | PR #11 `grok/audit-multi-entry-journal` | 2026-10-18
+  - Unique-id records, lossless migration, per-entry edit/delete, Firebase keyed by id
+  - Time-based OLS trend on daily means; projection from the trend end; tests (node + numpy + playwright)
+  - README created (files, data model, maths, deploy)
+
+---
+
 ## Human-Only Tasks (do not attempt unattended)
 
-- Deploy to Fasthosts live site (`visibledotdot.com/weight.html`) — includes all merged PRs #1–#7
+- Deploy to Fasthosts live site (`visibledotdot.com/weight.html`): upload `index.html` from main **as `weight.html`** (see README → Deploy). Includes all merged PRs to date.
+- Decide whether to remove the hard-coded personal default data from `index.html` (privacy)

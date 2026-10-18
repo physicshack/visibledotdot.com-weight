@@ -31,7 +31,7 @@ Tone: calm, factual, never shaming. Same design philosophy as the finance app.
 | localStorage key | `weightTrackerData` |
 | Firebase project | `paymind-b1d51` (shared with finance app) |
 | Firebase URL | `https://paymind-b1d51-default-rtdb.europe-west1.firebasedatabase.app` |
-| Firebase path | `/health/{userId}/` — live, contains `weightData`, `journalData`, `omadFoods`, `prefs` |
+| Firebase path | `/health/{userId}/` — live, contains `weightData`, `journalData` (both keyed by record id since v4), `omadFoods`, `prefs` |
 | App version | V3 |
 | Sandbox | `https://physicshack.github.io/visibledotdot.com-weight` |
 | Production | `https://visibledotdot.com/weight.html` (Fasthosts FTP) |
@@ -46,7 +46,9 @@ In order:
 1. `docs/ai-handoff.md` — current task, what's done, what's next
 2. `docs/spec.md` — full app spec, data schema, maths reference
 3. `docs/unattended-ai-workflow.md` — signalling convention, merge gates, execution rules
-4. `README.md` — local dev, file structure, deployment (once created)
+4. `README.md` — files, data model (v4), maths, tests, deployment
+
+Run `node tests/run-tests.js` before and after any maths/data change.
 
 ---
 

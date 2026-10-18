@@ -225,6 +225,7 @@
     transition: left 0.6s ease;
     box-shadow: 0 0 6px rgba(255,255,255,0.5);
   }
+  .journal-entry.editing { outline: 1px solid var(--accent2); }
   .bmi-labels {
     display: flex;
     justify-content: space-between;
@@ -877,15 +878,15 @@
       <div class="card-header">🎯 Goals</div>
       <div class="goal-section">
         <div class="goal-input">
-          <label>Start Weight <span style="color:var(--muted);font-size:10px;">(projection counts from today)</span></label>
+          <label>Start Weight <span style="color:var(--muted);font-size:10px;">(for progress %)</span></label>
           <div style="display:flex;gap:6px;align-items:center;">
-            <input type="number" id="goalStart" step="0.1" placeholder="kg" oninput="updateGoals()" style="flex:1;">
+            <input type="number" id="goalStart" step="0.1" placeholder="kg" oninput="updateGoals(); scheduleGoalPersist()" style="flex:1;">
             <button class="btn btn-ghost btn-sm" onclick="resetGoalStart()" title="Reset to latest weight">↺ Now</button>
           </div>
         </div>
         <div class="goal-input">
           <label>Target Weight</label>
-          <input type="number" id="goalTarget" step="0.1" placeholder="kg" oninput="updateGoals()">
+          <input type="number" id="goalTarget" step="0.1" placeholder="kg" oninput="updateGoals(); scheduleGoalPersist()">
         </div>
       </div>
       <div id="goalOutput" class="mt-12" style="font-size:13px; color:var(--muted);"></div>
@@ -909,11 +910,11 @@
     <div class="range-controls">
       <div class="range-group" style="flex:2;">
         <label>Start Date</label>
-        <input type="range" id="rangeStart" min="0" max="100" value="0" oninput="updateChartRange()">
+        <input type="range" id="rangeStart" min="0" max="100" step="1" value="0" aria-label="Chart start date" oninput="updateChartRange(event)">
       </div>
       <div class="range-group" style="flex:2;">
         <label>End Date</label>
-        <input type="range" id="rangeEnd" min="0" max="100" value="100" oninput="updateChartRange()">
+        <input type="range" id="rangeEnd" min="0" max="100" step="1" value="100" aria-label="Chart end date" oninput="updateChartRange(event)">
       </div>
       <div id="rangeDates" class="range-dates" style="font-size:12px; color:var(--muted); min-width:200px; text-align:right;"></div>
     </div>
@@ -978,7 +979,8 @@
 <div class="page" id="page-journal">
 
   <div class="journal-form">
-    <div class="card-header">✍ New Journal Entry</div>
+    <div class="card-header">✍ Journal Entry <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px;">add as many as you like per day</span></div>
+    <div id="jEditBanner" style="display:none;font-size:12px;color:var(--accent2);margin-bottom:10px;"></div>
     <div class="journal-form-grid">
       <div>
         <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Date</label>
@@ -1030,7 +1032,7 @@
       <label><input type="checkbox" id="jQuickWin"> Quick win</label>
     </div>
     <div class="row mt-12">
-      <button class="btn bg-sunrise shadow-glow" style="color:var(--bg);" onclick="saveJournal()">Save Entry</button>
+      <button class="btn bg-sunrise shadow-glow" style="color:var(--bg);" id="jSaveBtn" onclick="saveJournal()">Save Entry</button>
       <button class="btn btn-ghost" onclick="clearJournalForm()">Clear</button>
       <span id="jMsg" style="font-size:12px; color:var(--accent);"></span>
     </div>
@@ -1147,7 +1149,7 @@
         <div class="calorie-gauge"><div class="calorie-fill" id="calGauge" style="width:0%"></div></div>
         <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--muted);">
           <span>0</span>
-          <span>Target: <input type="number" id="calTarget" value="1500" style="width:60px; padding:2px 6px; font-size:11px; background:var(--surface2); border:1px solid var(--border); border-radius:4px; color:var(--text);" oninput="updateTotals()"></span>
+          <span>Target: <input type="number" id="calTarget" value="1500" style="width:60px; padding:2px 6px; font-size:11px; background:var(--surface2); border:1px solid var(--border); border-radius:4px; color:var(--text);" oninput="updateTotals(); scheduleGoalPersist()"></span>
           <span id="calTargetLabel">1500</span>
         </div>
       </div>
@@ -1409,6 +1411,10 @@ const PHASES = [
   {id:'maintenance', name:'Maintenance Range', start:null, end:null, note:'Future mode: hold a weight range and raise calories carefully.'}
 ];
 
+// "Total Lost" baseline when no true start weight is set: the first reading on/after this date
+// (the start of the 2026 reset). Used by BOTH the Tracker and Reset tabs so they always agree.
+const BASELINE_FROM = '2026-01-01';
+
 const WIN_KEYWORDS = [
   'acid', 'reflux', 'cough', 'snoring', 'sleep', 'belt', 'clothes', 'jeans',
   'xl', 'large', 'medium', 'morning', 'energy', 'focus', 'pressups',
@@ -1416,38 +1422,285 @@ const WIN_KEYWORDS = [
 ];
 
 // ═══════════════════════════════════════
-// UNIT HELPERS
+// PURE HELPERS — maths, units, dates, entries, trend, projection.
+// No DOM access and no app globals in this block: tests/run-tests.js
+// extracts everything between the @pure markers and unit-tests it in Node.
 // ═══════════════════════════════════════
-function kgToStLbs(kg) {
-  const totalLbs = kg * 2.20462;
-  const stone = Math.floor(totalLbs / 14);
-  const lbs = totalLbs % 14;
-  return {stone, lbs};
+/* @pure-begin */
+const KG_PER_LB = 0.45359237;              // international avoirdupois pound (exact by definition)
+const LB_PER_KG = 1 / KG_PER_LB;           // 2.20462262…
+const LB_PER_STONE = 14;
+const KG_PER_STONE = LB_PER_STONE * KG_PER_LB; // 6.35029318 kg
+const DAY_MS = 86400000;
+const MIN_LOSS_KG_PER_WEEK = 0.005;        // slower than this counts as "flat" — no projection
+const MAX_PROJECTION_DAYS = 730;           // don't draw projections more than 2 years out (axis would squash the data)
+
+function roundTo(x, dp) { const f = 10 ** dp; return Math.round(x * f) / f; }
+
+// Round the total pounds FIRST, then split, so 95.25 kg shows "15st 0.0lb", never "14st 14.0lb".
+function kgToStLbs(kg, dp = 1) {
+  const totalLbs = roundTo(kg * LB_PER_KG, dp);
+  const stone = Math.floor((totalLbs + 1e-9) / LB_PER_STONE);
+  const lbs = roundTo(totalLbs - stone * LB_PER_STONE, dp);
+  return {stone, lbs, totalLbs};
+}
+function stLbsToKg(stone, lbs) { return (stone * LB_PER_STONE + lbs) * KG_PER_LB; }
+function fmtStone(kg) { const {stone, lbs} = kgToStLbs(kg, 1); return `${stone}st ${lbs.toFixed(1)}lb`; }
+function fmtWeight(kg, unit) { return unit === 'kg' ? kg.toFixed(1) + ' kg' : fmtStone(kg); }
+// Stored stone/lbs/frac fields for a weight record (lbs to 2 dp), derived from kg.
+function stoneFields(kg) {
+  const {stone, lbs} = kgToStLbs(kg, 2);
+  const whole = Math.floor(lbs + 1e-9);
+  return {stone, lbs: whole, frac: roundTo(lbs - whole, 2)};
+}
+// Axis tick label for a value in decimal stones, e.g. 13.5 → "13st 7lb".
+function fmtStoneTick(st) {
+  const totalLb = Math.round(st * LB_PER_STONE);
+  return `${Math.floor(totalLb / LB_PER_STONE)}st ${totalLb % LB_PER_STONE}lb`;
 }
 
-function stLbsToKg(stone, lbs) {
-  return (stone * 14 + lbs) * 0.453592;
-}
-
-function fmtWeight(kg, unit) {
-  if (unit === 'kg') return kg.toFixed(1) + ' kg';
-  const {stone, lbs} = kgToStLbs(kg);
-  return `${stone}st ${lbs.toFixed(1)}lb`;
-}
-
-function fmtStone(kg) {
-  const {stone, lbs} = kgToStLbs(kg);
-  return `${stone}st ${lbs.toFixed(1)}lb`;
-}
-
-function bmi(kg) { return kg / (HEIGHT_M * HEIGHT_M); }
-
+function bmiFor(kg, heightM) { return kg / (heightM * heightM); }
+// Classify on the 1-dp value that is displayed, so "25.0" is never labelled Healthy.
 function bmiStatus(b) {
-  if (b < 18.5) return {label:'Underweight', cls:'pill-blue'};
-  if (b < 25) return {label:'Healthy', cls:'pill-green'};
-  if (b < 30) return {label:'Overweight', cls:'pill-amber'};
+  const r = roundTo(b, 1);
+  if (r < 18.5) return {label:'Underweight', cls:'pill-blue'};
+  if (r < 25) return {label:'Healthy', cls:'pill-green'};
+  if (r < 30) return {label:'Overweight', cls:'pill-amber'};
   return {label:'Obese', cls:'pill-red'};
 }
+
+// ── Dates. Calendar dates are 'YYYY-MM-DD' strings in the user's LOCAL time zone.
+// Day arithmetic uses UTC day numbers, so a 23/25-hour DST day (e.g. 25 Oct 2026) still counts as 1 day.
+function pad2(n) { return String(n).padStart(2, '0'); }
+function localDateStr(d = new Date()) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function localTimeStr(d = new Date()) { return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+function isDateStr(s) { return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s); }
+function isTimeStr(s) { return typeof s === 'string' && /^\d{2}:\d{2}$/.test(s); }
+function dayNumber(dateStr) { const [y, m, d] = dateStr.split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / DAY_MS); }
+function dayNumberToStr(n) { const d = new Date(n * DAY_MS); return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`; }
+function addDaysStr(dateStr, n) { return dayNumberToStr(dayNumber(dateStr) + n); }
+function daysBetween(start, end) { return dayNumber(end) - dayNumber(start); }
+function dayName(dateStr) { return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(dayNumber(dateStr) * DAY_MS).getUTCDay()]; }
+// Local wall-clock timestamp (ms) for plotting on the time axis.
+function localMs(dateStr, timeStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const [hh, mm] = isTimeStr(timeStr) ? timeStr.split(':').map(Number) : [0, 0];
+  return new Date(y, m - 1, d, hh, mm).getTime();
+}
+function fmtDateLong(dateStr) {
+  const d = new Date(dayNumber(dateStr) * DAY_MS);
+  return d.toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short', year:'numeric', timeZone:'UTC'});
+}
+
+// ── Entries (weight readings and journal records). Each has a unique id; the date is NOT a key.
+function newId(prefix) {
+  const r = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID()
+    : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  return `${prefix}-${r}`;
+}
+// Moment of an entry: real timestamp when we have one (ts, ms since epoch), else local date+time.
+function entryMoment(e) { return Number.isFinite(e.ts) ? e.ts : localMs(e.date, e.time); }
+function compareEntries(a, b) {
+  if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+  const ma = entryMoment(a), mb = entryMoment(b);
+  if (ma !== mb) return ma - mb;
+  const ca = a.createdAt || '', cb = b.createdAt || '';
+  if (ca !== cb) return ca < cb ? -1 : 1;
+  return String(a.id || '') < String(b.id || '') ? -1 : String(a.id || '') > String(b.id || '') ? 1 : 0;
+}
+function sortAsc(list) { return [...list].sort(compareEntries); }
+function sortDesc(list) { return sortAsc(list).reverse(); }
+
+function asList(x) { return Array.isArray(x) ? x : (x && typeof x === 'object') ? Object.values(x) : []; }
+
+// Migration / validation for weight readings. Accepts an array or a Firebase keyed object.
+// Legacy rows (no id) get a DETERMINISTIC id from date+time+occurrence, so two devices
+// migrating the same old data produce the same ids and a later merge doesn't duplicate.
+function normalizeWeightEntries(list) {
+  const out = [], seen = new Set(), legacy = {};
+  asList(list).forEach(raw => {
+    if (!raw || typeof raw !== 'object' || !isDateStr(raw.date)) return;
+    const kg = Number(raw.kg);
+    if (!Number.isFinite(kg) || kg <= 0) return;
+    const e = {...raw, kg};
+    if (e.time != null && !isTimeStr(e.time)) delete e.time;
+    if (e.ts != null && !Number.isFinite(e.ts)) delete e.ts;
+    if (!Number.isFinite(e.stone) || !Number.isFinite(e.lbs) || !Number.isFinite(e.frac)) Object.assign(e, stoneFields(kg));
+    if (!e.id) {
+      const base = `w-${e.date}-${e.time ? e.time.replace(':', '') : 'na'}`;
+      legacy[base] = (legacy[base] || 0) + 1;
+      e.id = `${base}-${legacy[base]}`;
+    }
+    e.id = String(e.id);
+    if (seen.has(e.id)) e.id = `${e.id}-dup${seen.size}`;
+    seen.add(e.id);
+    out.push(e);
+  });
+  return out;
+}
+
+// Migration / validation for journal records. Old data was one record per date (the date was the key).
+function normalizeJournalEntries(list) {
+  const out = [], seen = new Set(), legacy = {};
+  asList(list).forEach(raw => {
+    if (!raw || typeof raw !== 'object' || !isDateStr(raw.date)) return;
+    const e = {...raw};
+    e.comment = typeof e.comment === 'string' ? e.comment : (e.comment == null ? '' : String(e.comment));
+    e.notes = typeof e.notes === 'string' ? e.notes : (e.notes == null ? '' : String(e.notes));
+    const w = e.weight == null || e.weight === '' ? null : Number(e.weight);
+    e.weight = Number.isFinite(w) && w > 0 ? w : null;
+    if (e.time != null && !isTimeStr(e.time)) delete e.time;
+    if (e.ts != null && !Number.isFinite(e.ts)) delete e.ts;
+    if (e.checkin != null && typeof e.checkin !== 'object') delete e.checkin;
+    if (e.mealSnapshot != null && !Array.isArray(e.mealSnapshot)) e.mealSnapshot = asList(e.mealSnapshot);
+    e.day = dayName(e.date);
+    if (!e.id) {
+      const base = `j-${e.date}`;
+      legacy[base] = (legacy[base] || 0) + 1;
+      e.id = `${base}-${legacy[base]}`;
+    }
+    e.id = String(e.id);
+    if (seen.has(e.id)) e.id = `${e.id}-dup${seen.size}`;
+    seen.add(e.id);
+    out.push(e);
+  });
+  return out;
+}
+
+function entrySignature(e, kind) {
+  if (kind === 'weight') return `${e.date}|${e.time || ''}|${Number(e.kg).toFixed(3)}`;
+  return [e.date, e.time || '', (e.comment || '').trim(), (e.notes || '').trim(), e.weight ?? '',
+    JSON.stringify(e.checkin || null), JSON.stringify(e.mealSnapshot || null)].join('|');
+}
+// Lossless merge: never drops or overwrites an existing record.
+// Same id + same content → skipped. Same id + different content → kept under a new id.
+function mergeEntries(existing, incoming, kind) {
+  const byId = new Map(existing.map(e => [e.id, e]));
+  const sigs = new Set(existing.map(e => entrySignature(e, kind)));
+  const out = [...existing];
+  let added = 0, n = 0;
+  incoming.forEach(e => {
+    const sig = entrySignature(e, kind);
+    if (sigs.has(sig)) return;
+    let rec = e;
+    if (byId.has(rec.id)) { do { n++; } while (byId.has(`${e.id}-m${n}`)); rec = {...e, id: `${e.id}-m${n}`}; }
+    out.push(rec); byId.set(rec.id, rec); sigs.add(sig); added++;
+  });
+  return {list: out, added};
+}
+
+// Firebase RTDB keys may not contain . # $ [ ] /
+function firebaseSafeKey(k) { return String(k).replace(/[.#$\[\]\/]/g, '_'); }
+function toKeyedObject(list) { const o = {}; list.forEach(e => { o[firebaseSafeKey(e.id)] = e; }); return o; }
+
+// ── Trend. One point per calendar day (the mean of that day's readings), so a day with
+// three weigh-ins doesn't count three times. Ordinary least squares of kg on day number.
+function dailyMeans(weights) {
+  const by = new Map();
+  weights.forEach(w => { const g = by.get(w.date) || {date: w.date, sum: 0, n: 0}; g.sum += w.kg; g.n++; by.set(w.date, g); });
+  return [...by.values()].sort((a, b) => a.date < b.date ? -1 : 1)
+    .map(g => ({date: g.date, day: dayNumber(g.date), kg: g.sum / g.n, n: g.n}));
+}
+function linearFit(xs, ys) {
+  const n = xs.length;
+  if (n < 2) return null;
+  const xm = xs.reduce((a, b) => a + b, 0) / n, ym = ys.reduce((a, b) => a + b, 0) / n;
+  let sxy = 0, sxx = 0;
+  for (let i = 0; i < n; i++) { sxy += (xs[i] - xm) * (ys[i] - ym); sxx += (xs[i] - xm) ** 2; }
+  if (sxx === 0) return null;
+  const slope = sxy / sxx;
+  return {slope, intercept: ym - slope * xm, n};
+}
+function computeTrend(weights) {
+  const days = dailyMeans(weights);
+  if (days.length < 2) return null; // 0/1 points or all on the same day: no rate
+  const x0 = days[0].day;
+  const fit = linearFit(days.map(d => d.day - x0), days.map(d => d.kg));
+  if (!fit) return null;
+  const at = day => fit.intercept + fit.slope * (day - x0);
+  const first = days[0], last = days[days.length - 1];
+  return {days, slopePerDay: fit.slope, kgPerWeek: fit.slope * 7,
+    firstDate: first.date, lastDate: last.date, startKg: at(first.day), endKg: at(last.day), at};
+}
+
+// ── Projection: extend the SAME regression line from its value on the last visible
+// weigh-in day until it reaches the target. goalDate = first whole day on/after the crossing.
+function projectGoal({trend, latestKg, targetKg, todayStr}) {
+  if (!Number.isFinite(targetKg)) return {status: 'no-target'};
+  if (!Number.isFinite(latestKg)) return {status: 'no-data'};
+  if (latestKg <= targetKg) return {status: 'reached'};
+  if (!trend) return {status: 'no-trend'};
+  if (trend.kgPerWeek > -MIN_LOSS_KG_PER_WEEK) return {status: 'not-losing', kgPerWeek: trend.kgPerWeek};
+  const anchor = {date: trend.lastDate, kg: trend.endKg};
+  if (anchor.kg <= targetKg) return {status: 'trend-at-target', anchor, kgPerWeek: trend.kgPerWeek};
+  const days = (targetKg - anchor.kg) / trend.slopePerDay; // > 0
+  if (days > MAX_PROJECTION_DAYS) return {status: 'too-far', anchor, days, kgPerWeek: trend.kgPerWeek};
+  const goalDay = dayNumber(anchor.date) + Math.ceil(days - 1e-9);
+  const goalDate = dayNumberToStr(goalDay);
+  const past = !!todayStr && goalDate < todayStr;
+  return {status: past ? 'past' : 'ok', anchor, goalDate, daysFromAnchor: days,
+    daysFromToday: todayStr ? goalDay - dayNumber(todayStr) : null, kgPerWeek: trend.kgPerWeek};
+}
+
+function progressPct(startKg, latestKg, targetKg) {
+  if (![startKg, latestKg, targetKg].every(Number.isFinite) || startKg <= targetKg) return null;
+  return Math.min(100, Math.max(0, (startKg - latestKg) / (startKg - targetKg) * 100));
+}
+
+// ── Stats cards. Weights in any order. "Last 30 days" = the 30 calendar days ending today, inclusive.
+function weightSummary(weights, {trueStartKg = null, baselineFrom = null, todayStr}) {
+  const asc = sortAsc(weights);
+  if (!asc.length) return null;
+  const latest = asc[asc.length - 1], prev = asc.length > 1 ? asc[asc.length - 2] : null;
+  const baselineEntry = (baselineFrom && asc.find(w => w.date >= baselineFrom)) || asc[0];
+  const hasTrue = Number.isFinite(trueStartKg);
+  const baselineKg = hasTrue ? trueStartKg : baselineEntry.kg;
+  const from = addDaysStr(todayStr, -29);
+  const recent = asc.filter(w => w.date >= from && w.date <= todayStr);
+  return {
+    latest, prev, change: prev ? latest.kg - prev.kg : null,
+    baselineKg, baselineDate: hasTrue ? null : baselineEntry.date, totalLost: baselineKg - latest.kg,
+    recent: {from, count: recent.length, change: recent.length > 1 ? recent[recent.length - 1].kg - recent[0].kg : null},
+    daysSinceLatest: daysBetween(latest.date, todayStr),
+  };
+}
+
+// Reset-tab "State check": the most recent N days that have a check-in (several entries on
+// one day count as one day for OMAD-kept / alcohol; ratings are averaged over all entries).
+function stateCheck(journal, maxDays = 14) {
+  const byDate = new Map();
+  journal.filter(j => j.checkin).forEach(j => { if (!byDate.has(j.date)) byDate.set(j.date, []); byDate.get(j.date).push(j); });
+  const dates = [...byDate.keys()].sort().reverse().slice(0, maxDays);
+  const entries = dates.flatMap(d => byDate.get(d));
+  const daysWith = k => dates.filter(d => byDate.get(d).some(j => j.checkin[k])).length;
+  const avg = k => { const v = entries.map(j => Number(j.checkin[k])).filter(x => x >= 1 && x <= 5); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  return {days: dates.length, omadDays: daysWith('omadKept'), alcoholDays: daysWith('alcohol'), foodNoise: avg('foodNoise'), energy: avg('energy')};
+}
+
+// ── Chart helpers
+function rangeIndices(n, startPct, endPct) {
+  if (n <= 0) return null;
+  let si = Math.round(startPct / 100 * (n - 1)), ei = Math.round(endPct / 100 * (n - 1));
+  si = Math.max(0, Math.min(si, n - 1));
+  ei = Math.max(si, Math.min(ei, n - 1));
+  return {si, ei};
+}
+// Y axis bounds (in display units) covering every plotted value with symmetric padding and
+// whole-number / whole-pound ticks. valuesKg = data + trend + projection + target.
+function yAxisFor(valuesKg, unit) {
+  const lo = Math.min(...valuesKg), hi = Math.max(...valuesKg);
+  if (unit === 'kg') {
+    const span = hi - lo, pad = Math.max(0.5, span * 0.05);
+    const step = [0.5, 1, 2, 5, 10, 20].find(s => (span + 2 * pad) / s <= 10) || 20;
+    return {min: Math.floor((lo - pad) / step) * step, max: Math.ceil((hi + pad) / step) * step, stepSize: step};
+  }
+  const loLb = lo * LB_PER_KG, hiLb = hi * LB_PER_KG, span = hiLb - loLb, pad = Math.max(1, span * 0.05);
+  const step = [1, 2, 4, 7, 14, 28, 56].find(s => (span + 2 * pad) / s <= 10) || 56;
+  return {min: Math.floor((loLb - pad) / step) * step / LB_PER_STONE, max: Math.ceil((hiLb + pad) / step) * step / LB_PER_STONE, stepSize: step / LB_PER_STONE};
+}
+/* @pure-end */
+
+function bmi(kg) { return bmiFor(kg, HEIGHT_M); }
 
 // ═══════════════════════════════════════
 // PAGE NAV
@@ -1472,48 +1725,23 @@ function showPage(id) {
   replaySunRise();
 }
 
+function syncUnitToggle() {
+  document.querySelectorAll('.unit-toggle button').forEach(b => b.classList.toggle('active', b.getAttribute('onclick') === `setUnit('${currentUnit}')`));
+  document.getElementById('chartUnit').value = currentUnit === 'kg' ? 'kg' : 'stone';
+}
+
 function setUnit(u) {
   currentUnit = u;
-  document.querySelectorAll('.unit-toggle button').forEach(b => b.classList.remove('active'));
-  const evt = typeof event !== 'undefined' ? event : null;
-  if (evt?.target) evt.target.classList.add('active');
-  document.getElementById('chartUnit').value = u === 'kg' ? 'kg' : 'stone';
+  syncUnitToggle();
+  persistAll();
   renderStats();
   renderTable();
   renderChart();
   renderReset();
 }
 
-// ═══════════════════════════════════════
-// TREND HELPER — kg/week from regression on real dates
-// ═══════════════════════════════════════
-function trendKgPerWeek(sortedAsc) {
-  const n = sortedAsc.length;
-  if (n < 2) return 0;
-  const t0 = new Date(sortedAsc[0].date).getTime();
-  const xs = sortedAsc.map(d => (new Date(d.date).getTime() - t0) / 86400000);
-  const ys = sortedAsc.map(d => d.kg);
-  const xMean = xs.reduce((a,b) => a+b, 0) / n;
-  const yMean = ys.reduce((a,b) => a+b, 0) / n;
-  let num = 0, den = 0;
-  for (let i = 0; i < n; i++) { num += (xs[i]-xMean)*(ys[i]-yMean); den += (xs[i]-xMean)**2; }
-  return den ? (num/den) * 7 : 0; // kg/week, negative = losing
-}
-
-function parseDay(dateStr) {
-  return new Date(dateStr + 'T00:00:00');
-}
-
-function daysBetween(start, end) {
-  return Math.round((parseDay(end) - parseDay(start)) / 86400000);
-}
-
 function latestWeightRecord() {
-  return [...weightData].sort((a,b) => b.date.localeCompare(a.date))[0] || null;
-}
-
-function firstWeightSince(date) {
-  return [...weightData].sort((a,b) => a.date.localeCompare(b.date)).find(w => w.date >= date) || null;
+  return weightData.length ? sortAsc(weightData)[weightData.length - 1] : null;
 }
 
 function activePhase(latestDate) {
@@ -1538,13 +1766,19 @@ function phaseStatus(phase, latestDate) {
 }
 
 function renderReset() {
+  if (!document.getElementById('resetHero')) return;
   const latest = latestWeightRecord();
-  if (!latest || !document.getElementById('resetHero')) return;
-  const first2026 = firstWeightSince('2026-01-01') || latest;
+  if (!latest) {
+    ['phaseStrip','latestSignal','milestoneGrid','quickWins','stateCheck'].forEach(id => { document.getElementById(id).innerHTML = ''; });
+    document.getElementById('resetHero').innerHTML = '<div style="color:var(--muted);font-size:13px;">No weight entries yet. Add one on the Tracker tab.</div>';
+    return;
+  }
+  const today = localDateStr();
+  const summary = weightSummary(weightData, {trueStartKg, baselineFrom: BASELINE_FROM, todayStr: today});
   const startDate = PHASES[0].start;
-  const currentPhase = activePhase(latest.date);
-  const resetDay = Math.max(1, daysBetween(startDate, latest.date) + 1);
-  const totalLoss = first2026.kg - latest.kg;
+  const currentPhase = activePhase(today);
+  const resetDay = Math.max(1, daysBetween(startDate, today) + 1);
+  const totalLoss = summary.totalLost;
   const targetKg = parseFloat(document.getElementById('goalTarget')?.value) || 74;
   const toTarget = Math.max(0, latest.kg - targetKg);
   const b = bmi(latest.kg);
@@ -1559,7 +1793,7 @@ function renderReset() {
     </div>`;
 
   document.getElementById('phaseStrip').innerHTML = PHASES.map(p => {
-    const st = phaseStatus(p, latest.date);
+    const st = phaseStatus(p, today);
     const dateLabel = p.start ? `${p.start}${p.end ? ' to ' + p.end : '+'}` : 'future';
     return `<div class="phase-step ${st}">
       <div class="phase-name">${st === 'done' ? '✓ ' : st === 'active' ? '● ' : ''}${esc(p.name)}</div>
@@ -1567,8 +1801,9 @@ function renderReset() {
     </div>`;
   }).join('');
 
-  const latestJournal = [...journalData].sort((a,b) => b.date.localeCompare(a.date)).find(j => (j.comment || '').trim() || j.checkin);
-  const latestWin = [...journalData].sort((a,b) => b.date.localeCompare(a.date)).find(journalHasQuickWin);
+  const journalDesc = sortDesc(journalData);
+  const latestJournal = journalDesc.find(j => (j.comment || '').trim() || j.checkin);
+  const latestWin = journalDesc.find(journalHasQuickWin);
   document.getElementById('latestSignal').innerHTML = `
     <div class="pill ${status.cls}" style="margin-bottom:10px;">BMI ${b.toFixed(1)} · ${status.label}</div>
     <div style="font-size:13px;color:var(--muted);line-height:1.55;">
@@ -1581,8 +1816,7 @@ function renderReset() {
     </div>`;
 
   const healthyKg = 24.9 * HEIGHT_M * HEIGHT_M;
-  const totalLbs = latest.kg * 2.20462;
-  const nextStoneBoundaryKg = Math.floor(totalLbs / 14) * 14 / 2.20462;
+  const nextStoneBoundaryKg = Math.floor(latest.kg / KG_PER_STONE) * KG_PER_STONE;
   const nextFiveKg = Math.floor(latest.kg / 5) * 5;
   const milestones = [
     {label:'Next stone line', value:fmtStone(nextStoneBoundaryKg), gap:latest.kg - nextStoneBoundaryKg},
@@ -1593,27 +1827,21 @@ function renderReset() {
   document.getElementById('milestoneGrid').innerHTML = milestones.map(m => `
     <div class="stat-card"><div class="stat-label">${esc(m.label)}</div><div class="stat-value">${esc(m.value)}</div><div class="stat-sub">${m.gap.toFixed(1)} kg away</div></div>`).join('');
 
-  const wins = [...journalData].sort((a,b) => b.date.localeCompare(a.date)).filter(journalHasQuickWin).slice(0, 12);
+  const wins = journalDesc.filter(journalHasQuickWin).slice(0, 12);
   document.getElementById('quickWins').innerHTML = wins.length ? wins.map(j => `
     <div class="win-item">
       <div class="journal-date">${esc(j.date)} ${j.day ? '· ' + esc(j.day) : ''}</div>
       <div class="journal-text">${esc(shortText(j.checkin?.winTag || j.comment, 170))}</div>
     </div>`).join('') : '<div style="color:var(--muted);font-size:13px;">Mark quick wins from the journal form and they will collect here.</div>';
 
-  const checkins = [...journalData].filter(j => j.checkin).sort((a,b) => b.date.localeCompare(a.date));
-  const recent = checkins.slice(0, 14);
-  const omadDays = recent.filter(j => j.checkin.omadKept).length;
-  const alcoholDays = recent.filter(j => j.checkin.alcohol).length;
-  const avg = key => {
-    const vals = recent.map(j => Number(j.checkin[key])).filter(Boolean);
-    return vals.length ? (vals.reduce((a,v) => a + v, 0) / vals.length).toFixed(1) : '—';
-  };
+  const sc = stateCheck(journalData, 14);
+  const avgTxt = v => v === null ? '—' : v.toFixed(1);
   document.getElementById('stateCheck').innerHTML = `
     <div class="milestone-grid">
-      <div class="stat-card"><div class="stat-label">OMAD kept</div><div class="stat-value">${recent.length ? omadDays + '/' + recent.length : '—'}</div><div class="stat-sub">recent check-ins</div></div>
-      <div class="stat-card"><div class="stat-label">Food noise</div><div class="stat-value">${avg('foodNoise')}</div><div class="stat-sub">lower is better</div></div>
-      <div class="stat-card"><div class="stat-label">Energy</div><div class="stat-value">${avg('energy')}</div><div class="stat-sub">1-5 average</div></div>
-      <div class="stat-card"><div class="stat-label">Alcohol days</div><div class="stat-value">${recent.length ? alcoholDays : '—'}</div><div class="stat-sub">recent check-ins</div></div>
+      <div class="stat-card"><div class="stat-label">OMAD kept</div><div class="stat-value">${sc.days ? sc.omadDays + '/' + sc.days : '—'}</div><div class="stat-sub">days, last ${sc.days || 0} check-in days</div></div>
+      <div class="stat-card"><div class="stat-label">Food noise</div><div class="stat-value">${avgTxt(sc.foodNoise)}</div><div class="stat-sub">lower is better</div></div>
+      <div class="stat-card"><div class="stat-label">Energy</div><div class="stat-value">${avgTxt(sc.energy)}</div><div class="stat-sub">1-5 average</div></div>
+      <div class="stat-card"><div class="stat-label">Alcohol days</div><div class="stat-value">${sc.days ? sc.alcoholDays : '—'}</div><div class="stat-sub">of last ${sc.days || 0} check-in days</div></div>
     </div>`;
 
   document.getElementById('todayPrompt').innerHTML = `
@@ -1627,43 +1855,43 @@ function renderReset() {
 // STATS
 // ═══════════════════════════════════════
 function renderStats() {
-  const sorted = [...weightData].sort((a,b) => b.date.localeCompare(a.date));
-  if (!sorted.length) return;
-
-  const latest = sorted[0];
-  const prev = sorted[1];
-  const oldest = sorted[sorted.length - 1];
-
+  const today = localDateStr();
+  const s = weightSummary(weightData, {trueStartKg, baselineFrom: BASELINE_FROM, todayStr: today});
+  if (!s) {
+    document.getElementById('statsGrid').innerHTML = `<div class="stat-card" style="grid-column:1/-1;"><div class="stat-label">No weight entries yet</div><div class="stat-sub">Add your first reading below.</div></div>`;
+    document.getElementById('bmiValue').textContent = '—';
+    document.getElementById('bmiStatus').textContent = '';
+    requestAnimationFrame(() => renderChart());
+    return;
+  }
+  const latest = s.latest;
   const latBmi = bmi(latest.kg);
   const {label, cls} = bmiStatus(latBmi);
-  const startKg = trueStartKg !== null ? trueStartKg : oldest.kg;
-  const totalLost = startKg - latest.kg;
-  const change = prev ? latest.kg - prev.kg : 0;
-
-  // Weekly rate is computed by renderChart from the visible slice — placeholder updated there
-  const weeklyRate = null;
-
-  // Recent period (last 30d)
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
-  const recent = sorted.filter(d => new Date(d.date) >= cutoff);
-  // recentLost: negative = lost weight (same sign convention as 'change' / Since Last)
-  const recentLost = recent.length > 1 ? recent[0].kg - recent[recent.length-1].kg : 0;
+  const startKg = s.baselineKg;
+  const totalLost = s.totalLost;
+  const change = s.change;
+  const r = s.recent;
+  const signed = v => `${v > 0 ? '+' : ''}${v.toFixed(1)} kg`;
+  const lbSub = v => `${v < 0 ? '↓ ' : v > 0 ? '↑ ' : ''}${Math.abs(v * LB_PER_KG).toFixed(1)} lb`;
+  const goodBad = v => v < 0 ? 'stat-good' : v > 0 ? 'stat-bad' : '';
+  const ago = s.daysSinceLatest;
+  const agoTxt = ago <= 0 ? 'today' : ago === 1 ? 'yesterday' : `${ago} days ago`;
 
   document.getElementById('statsGrid').innerHTML = `
     <div class="stat-card">
       <div class="stat-label">Current Weight</div>
       <div class="stat-value">${fmtWeight(latest.kg, currentUnit)}</div>
-      <div class="stat-sub">${latest.date}</div>
+      <div class="stat-sub">${esc(latest.date)}${latest.time ? ' ' + esc(latest.time) : ''} · ${agoTxt}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Since Last</div>
-      <div class="stat-value ${change < 0 ? 'stat-good' : change > 0 ? 'stat-bad' : ''}">${change > 0 ? '+' : ''}${change.toFixed(1)} kg</div>
-      <div class="stat-sub">${change < 0 ? '↓ ' : change > 0 ? '↑ ' : ''}${Math.abs(change * 2.20462).toFixed(1)} lb</div>
+      <div class="stat-label">Since Last Reading</div>
+      <div class="stat-value ${change === null ? '' : goodBad(change)}">${change === null ? '—' : signed(change)}</div>
+      <div class="stat-sub">${change === null ? 'only one reading' : lbSub(change)}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total Lost <button onclick="editTrueStart()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:0 2px;" title="Set true start weight">✎</button></div>
-      <div class="stat-value stat-good">${totalLost.toFixed(1)} kg</div>
-      <div class="stat-sub" id="totalLostSub">${fmtStone(startKg)} → ${fmtStone(latest.kg)}${trueStartKg !== null ? ' ★' : ''}</div>
+      <div class="stat-value ${totalLost > 0 ? 'stat-good' : totalLost < 0 ? 'stat-bad' : ''}">${totalLost.toFixed(1)} kg</div>
+      <div class="stat-sub" id="totalLostSub">${fmtStone(startKg)} → ${fmtStone(latest.kg)}${trueStartKg !== null ? ' ★' : ' · from ' + esc(s.baselineDate)}</div>
     </div>
     <div class="stat-card" id="weeklyRateCard">
       <div class="stat-label">Weekly Rate (trend)</div>
@@ -1677,8 +1905,8 @@ function renderStats() {
     </div>
     <div class="stat-card">
       <div class="stat-label">Last 30 Days</div>
-      <div class="stat-value ${recentLost < 0 ? 'stat-good' : recentLost > 0 ? 'stat-bad' : ''}">${recentLost > 0 ? '+' : ''}${recentLost.toFixed(1)} kg</div>
-      <div class="stat-sub">${recentLost < 0 ? '↓ ' : recentLost > 0 ? '↑ ' : ''}${Math.abs(recentLost * 2.20462).toFixed(1)} lb · ${recent.length} readings</div>
+      <div class="stat-value ${r.change === null ? '' : goodBad(r.change)}">${r.change === null ? '—' : signed(r.change)}</div>
+      <div class="stat-sub">${r.change === null ? `${r.count} reading${r.count === 1 ? '' : 's'} since ${esc(r.from)} · last ${agoTxt}` : `${lbSub(r.change)} · ${r.count} readings`}</div>
     </div>
   `;
 
@@ -1693,11 +1921,9 @@ function renderStats() {
   const goalKg = 24.9 * HEIGHT_M * HEIGHT_M;
   document.getElementById('bmiGoalWeight').textContent = `${goalKg.toFixed(1)} kg / ${fmtStone(goalKg)}`;
 
-  // Pre-fill goals
-  if (!document.getElementById('goalStart').value) {
-    document.getElementById('goalStart').value = latest.kg.toFixed(1);
-    document.getElementById('goalTarget').value = goalKg.toFixed(1);
-  }
+  // Pre-fill goals (start = the Total Lost baseline, used for progress %)
+  if (!document.getElementById('goalStart').value) document.getElementById('goalStart').value = startKg.toFixed(1);
+  if (!document.getElementById('goalTarget').value) document.getElementById('goalTarget').value = goalKg.toFixed(1);
   // Always refresh chart so weekly rate card gets updated from visible slice
   requestAnimationFrame(() => renderChart());
 }
@@ -1716,62 +1942,80 @@ function editTrueStart() {
 }
 
 function resetGoalStart() {
-  const sorted = [...weightData].sort((a,b) => b.date.localeCompare(a.date));
-  if (!sorted.length) return;
-  document.getElementById('goalStart').value = sorted[0].kg.toFixed(1);
+  const latest = latestWeightRecord();
+  if (!latest) return;
+  document.getElementById('goalStart').value = latest.kg.toFixed(1);
   updateGoals();
+  scheduleGoalPersist();
 }
 
 function updateGoals() {
-  const start = parseFloat(document.getElementById('goalStart').value);
+  // The projection is computed from the chart's visible slice, so the chart renders the goal card too.
+  renderChart();
+  renderReset();
+}
+
+function renderGoalOutput(m) {
+  const out = document.getElementById('goalOutput');
   const target = parseFloat(document.getElementById('goalTarget').value);
-  if (isNaN(start) || isNaN(target) || start <= target) {
-    document.getElementById('goalOutput').innerHTML = '';
-    renderChart();
-    renderReset();
-    return;
+  const start = parseFloat(document.getElementById('goalStart').value);
+  const latest = m && m.n ? m.asc[m.n - 1] : null;
+  if (!latest || !Number.isFinite(target)) { out.innerHTML = ''; return; }
+  const p = m.projection;
+  const rate = m.trend ? -m.trend.kgPerWeek : null; // positive = losing
+  const toLose = Math.max(0, latest.kg - target);
+  const pct = progressPct(start, latest.kg, target);
+  const basis = m.atLatest ? '' : ` (range ends ${esc(m.slice[m.slice.length - 1].date)})`;
+  let when = '—', whenSub = '';
+  switch (p.status) {
+    case 'reached': when = 'Target reached ✓'; break;
+    case 'ok': when = fmtDateLong(p.goalDate); whenSub = `${p.daysFromToday} days from today`; break;
+    case 'past': when = fmtDateLong(p.goalDate); whenSub = `already passed: latest reading is ${daysBetween(latest.date, localDateStr())} days old, so log a weight`; break;
+    case 'too-far': whenSub = 'more than 2 years at this rate'; break;
+    case 'not-losing': whenSub = 'trend is flat or rising'; break;
+    case 'trend-at-target': whenSub = 'trend line is already at target; keep logging'; break;
+    case 'no-trend': whenSub = 'needs readings on 2+ days'; break;
   }
-  const tolose = start - target;
-
-  // Get current weekly rate from the visible chart slice (computed by renderChart)
-  const rateEl = document.getElementById('weeklyRateVal');
-  const rateText = rateEl ? rateEl.textContent : '';
-  // Parse it back — format is e.g. "−0.52 kg/wk" or "+0.01 kg/wk"
-  const rateMatch = rateText.match(/([\d.]+)\s*kg/);
-  const isGain = rateText.startsWith('+');
-  const weeklyRate = rateMatch ? (isGain ? -parseFloat(rateMatch[1]) : parseFloat(rateMatch[1])) : 0;
-
-  const weeksNeeded = weeklyRate > 0 ? tolose / weeklyRate : Infinity;
-  const targetDate = new Date();
-  targetDate.setDate(targetDate.getDate() + (weeksNeeded * 7));
-
-  document.getElementById('goalOutput').innerHTML = `
+  out.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-      <div><span style="color:var(--muted);font-size:11px;">To lose</span><br><b>${tolose.toFixed(1)} kg</b> / ${(tolose*2.20462).toFixed(1)} lb</div>
-      <div><span data-rate style="color:var(--muted);font-size:11px;">At trend rate (${weeklyRate.toFixed(2)} kg/wk)</span><br><b data-date style="color:var(--accent);">${isFinite(weeksNeeded) ? targetDate.toDateString() : '—'}</b></div>
+      <div><span style="color:var(--muted);font-size:11px;">To lose (from latest)</span><br><b>${toLose.toFixed(1)} kg</b> / ${(toLose * LB_PER_KG).toFixed(1)} lb</div>
+      <div><span data-rate style="color:var(--muted);font-size:11px;">At trend rate (${rate === null ? '—' : rate.toFixed(2) + ' kg/wk'})${basis}</span><br><b data-date style="color:var(--accent);">${when}</b>${whenSub ? `<br><span style="font-size:11px;color:var(--muted);">${whenSub}</span>` : ''}</div>
+      <div><span style="color:var(--muted);font-size:11px;">Progress (start → target)</span><br><b>${pct === null ? '—' : pct.toFixed(0) + '%'}</b></div>
       <div><span style="color:var(--muted);font-size:11px;">Target BMI</span><br><b>${bmi(target).toFixed(1)}</b> <span class="pill ${bmiStatus(bmi(target)).cls}" style="font-size:10px;">${bmiStatus(bmi(target)).label}</span></div>
       <div><span style="color:var(--muted);font-size:11px;">Target (stones)</span><br><b>${fmtStone(target)}</b></div>
     </div>
   `;
-  renderChart();
-  renderReset();
 }
 
 // ═══════════════════════════════════════
 // CHART
 // ═══════════════════════════════════════
-function updateChartRange() {
-  chartRangeStart = parseInt(document.getElementById('rangeStart').value);
-  chartRangeEnd = parseInt(document.getElementById('rangeEnd').value);
-  if (chartRangeStart > chartRangeEnd - 5) {
-    chartRangeStart = Math.max(0, chartRangeEnd - 5);
-    document.getElementById('rangeStart').value = chartRangeStart;
+function updateChartRange(evt) {
+  const GAP = 5; // percent
+  let s = parseInt(document.getElementById('rangeStart').value, 10);
+  let e = parseInt(document.getElementById('rangeEnd').value, 10);
+  if (s > e - GAP) {
+    if (evt && evt.target && evt.target.id === 'rangeStart') e = Math.min(100, s + GAP);
+    if (s > e - GAP) s = Math.max(0, e - GAP);
   }
+  chartRangeStart = s;
+  chartRangeEnd = e;
   chartRangeUserSet = true;
   renderChart();
   // Debounced save — only persists after slider stops moving for 500ms
   clearTimeout(chartRangePersistTimer);
   chartRangePersistTimer = setTimeout(() => persistAll(), 500);
+}
+
+// Keep the slider thumbs in step with the state actually used to draw the chart.
+function syncRangeSliders(m) {
+  const rs = document.getElementById('rangeStart'), re = document.getElementById('rangeEnd');
+  rs.value = chartRangeStart;
+  re.value = chartRangeEnd;
+  if (m && m.n) {
+    rs.setAttribute('aria-valuetext', m.slice[0].date);
+    re.setAttribute('aria-valuetext', m.slice[m.slice.length - 1].date);
+  }
 }
 
 // Returns a chartRangeStart percentage (0–100) representing the smart default
@@ -1797,7 +2041,7 @@ function computeSmartChartStart(sorted) {
     // Show 3-month window
     const cutoff = new Date();
     cutoff.setMonth(cutoff.getMonth() - 3);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const cutoffStr = localDateStr(cutoff);
     const idx = sorted.findIndex(d => d.date >= cutoffStr);
     return idx < 0 ? 0 : Math.round(idx / (sorted.length - 1) * 100);
   }
@@ -1820,148 +2064,117 @@ function computeSmartChartStart(sorted) {
   });
 
   if (!peakEntry) return 0;
-  const peakIdx = sorted.findIndex(d => d.date === peakEntry.date);
+  const peakIdx = sorted.indexOf(peakEntry);
   return Math.round(peakIdx / (sorted.length - 1) * 100);
+}
+
+let chartModel = null;
+
+// Everything the chart, the rate card and the goal card need, from one place.
+function buildChartModel() {
+  const asc = sortAsc(weightData);
+  const n = asc.length;
+  // Auto-detect smart start once per user/data load — only when user hasn't manually set the slider
+  if (!chartSmartDefaultDone && !chartRangeUserSet && n > 1) {
+    chartRangeStart = computeSmartChartStart(asc);
+    chartSmartDefaultDone = true;
+  }
+  const idx = rangeIndices(n, chartRangeStart, chartRangeEnd);
+  if (!idx) return {n: 0, projection: {status: 'no-data'}};
+  const slice = asc.slice(idx.si, idx.ei + 1);
+  const trend = computeTrend(slice);
+  const targetKg = parseFloat(document.getElementById('goalTarget').value);
+  const projection = projectGoal({trend, latestKg: asc[n - 1].kg, targetKg, todayStr: localDateStr()});
+  return {n, asc, idx, slice, trend, projection, targetKg, atLatest: idx.ei === n - 1};
+}
+
+function renderRateCard(m) {
+  const rateEl = document.getElementById('weeklyRateVal');
+  const rateSubEl = document.getElementById('weeklyRateSub');
+  if (!rateEl) return;
+  if (!m.trend) {
+    rateEl.className = 'stat-value';
+    rateEl.textContent = '—';
+    rateSubEl.textContent = m.n ? 'needs readings on 2+ days' : '';
+    return;
+  }
+  const weeklyRate = -m.trend.kgPerWeek; // positive = losing
+  const losing = weeklyRate > MIN_LOSS_KG_PER_WEEK, gaining = weeklyRate < -MIN_LOSS_KG_PER_WEEK;
+  rateEl.className = `stat-value ${losing ? 'stat-good' : gaining ? 'stat-bad' : ''}`;
+  rateEl.textContent = `${losing ? '−' : gaining ? '+' : ''}${Math.abs(weeklyRate).toFixed(2)} kg/wk`;
+  rateSubEl.textContent = `${losing ? '↓' : gaining ? '↑' : ''} ${Math.abs(weeklyRate * LB_PER_KG).toFixed(2)} lb/wk · ${m.trend.days.length} days`;
 }
 
 function renderChart() {
   const unit = document.getElementById('chartUnit').value;
-  const sorted = [...weightData].sort((a,b) => a.date.localeCompare(b.date));
-  const n = sorted.length;
+  const m = buildChartModel();
+  chartModel = m;
+  syncRangeSliders(m);
+  renderRateCard(m);
+  renderGoalOutput(m);
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+  const rangeDatesEl = document.getElementById('rangeDates');
+  if (!m.n) { rangeDatesEl.textContent = 'No weight entries yet'; return; }
 
-  // Auto-detect smart start once per user/data load — only when user hasn't manually set the slider
-  if (!chartSmartDefaultDone && !chartRangeUserSet && n > 1) {
-    chartRangeStart = computeSmartChartStart(sorted);
-    document.getElementById('rangeStart').value = chartRangeStart;
-    chartSmartDefaultDone = true;
+  const toVal = kg => unit === 'kg' ? kg : kg / KG_PER_STONE;
+  const first = m.slice[0], last = m.slice[m.slice.length - 1];
+  const points = m.slice.map(w => ({x: Number.isFinite(w.ts) ? w.ts : localMs(w.date, w.time), y: toVal(w.kg)}));
+  const t = m.trend, p = m.projection;
+  const trendData = t ? [{x: localMs(t.firstDate), y: toVal(t.startKg)}, {x: localMs(t.lastDate), y: toVal(t.endKg)}] : [];
+  // Projection: only when the visible range ends at the latest reading. It continues the trend line
+  // from its own end point (same slope) to where it meets the target.
+  let projData = [], xMax;
+  if (m.atLatest && (p.status === 'ok' || p.status === 'past')) {
+    const x0 = localMs(p.anchor.date);
+    const x1 = x0 + p.daysFromAnchor * DAY_MS;
+    projData = [{x: x0, y: toVal(p.anchor.kg)}, {x: x1, y: toVal(m.targetKg)}];
+    xMax = x1 + 7 * DAY_MS;
   }
+  const xFirst = Math.min(points[0].x, trendData.length ? trendData[0].x : Infinity);
+  const xLast = xMax || Math.max(points[points.length - 1].x, trendData.length ? trendData[1].x : -Infinity);
+  const xPad = Math.max(DAY_MS / 2, (xLast - xFirst) * 0.015); // so end points aren't clipped by the axis
+  const xMin = xFirst - xPad, xEnd = xLast + (xMax ? 0 : xPad);
 
-  const si = Math.floor(chartRangeStart / 100 * (n - 1));
-  const ei = Math.min(n - 1, Math.floor(chartRangeEnd / 100 * (n - 1)));
-  const slice = sorted.slice(si, ei + 1);
+  rangeDatesEl.textContent = `${first.date} → ${last.date}` + (projData.length ? ` · projected to ${p.goalDate}` : '');
 
-  document.getElementById('rangeDates').textContent = `${slice[0]?.date} → ${slice[slice.length-1]?.date}`; // updated below if future extended
+  const hasTarget = Number.isFinite(m.targetKg);
+  const allKg = [...m.slice.map(w => w.kg), ...(t ? [t.startKg, t.endKg] : []), ...(hasTarget ? [m.targetKg] : [])];
+  const yAxis = yAxisFor(allKg, unit);
 
-  const toVal = kg => unit === 'kg' ? kg : kg * 2.20462 / 14;
-
-  const labels = slice.map(d => d.date);
-  const vals = slice.map(d => toVal(d.kg));
-
-  // Trend: regress on indices (0,1,2…) so Chart.js plots a perfectly straight line.
-  // For the weekly RATE we use real calendar days across the same slice.
-  const m = vals.length;
-  const iMean = (m - 1) / 2;
-  const vMean = vals.reduce((a,b) => a+b, 0) / m;
-  let numI = 0, denI = 0;
-  vals.forEach((v, i) => { numI += (i - iMean) * (v - vMean); denI += (i - iMean) ** 2; });
-  const slopeIdx = denI ? numI / denI : 0;
-  const interceptIdx = vMean - slopeIdx * iMean;
-  // Two-point straight trend: only need start and end values
-  const trendStart = interceptIdx;
-  const trendEnd = interceptIdx + slopeIdx * (m - 1);
-
-  // Weekly rate: slope of the same regression but in kg/week using real day span
-  // slopeIdx is in display-units per index. Convert back to kg per index, then scale by real days.
-  const kgPerIdx = unit === 'kg' ? slopeIdx : slopeIdx * 6.35029; // stone→kg
-  const totalDays = (new Date(slice[slice.length-1].date) - new Date(slice[0].date)) / 86400000;
-  const daysPerIdx = m > 1 ? totalDays / (m - 1) : 1;
-  const kgPerWeek = daysPerIdx > 0 ? kgPerIdx / daysPerIdx * 7 : 0;
-  const weeklyRate = -kgPerWeek; // positive = losing weight
-
-  // Extend chart into the future when end slider is at max and a goal is projected
-  const goalTargetKg = parseFloat(document.getElementById('goalTarget').value);
-  const goalStartKg = parseFloat(document.getElementById('goalStart').value);
-  let projectedEndMs = null; // future x-axis max (ms timestamp)
-  let trendFutureY = trendEnd;
-  if (chartRangeEnd >= 98 && weeklyRate > 0.005 && !isNaN(goalTargetKg) && !isNaN(goalStartKg) && goalStartKg > goalTargetKg) {
-    const weeksNeeded = (goalStartKg - goalTargetKg) / weeklyRate;
-    const goalDate = new Date();
-    goalDate.setDate(goalDate.getDate() + Math.round(weeksNeeded * 7) + 7); // goal date + 7 days
-    if (goalDate.getTime() > new Date(labels[m - 1]).getTime()) {
-      projectedEndMs = goalDate.getTime();
-      trendFutureY = toVal(goalTargetKg); // trend terminates at goal weight
-    }
-  }
-  const trend = [trendStart, projectedEndMs ? trendFutureY : trendEnd];
-  const trendLabels = [new Date(labels[0]).getTime(), projectedEndMs || new Date(labels[m - 1]).getTime()];
-
-  // Update range display — show future end date when extended
-  if (projectedEndMs) {
-    const futureStr = new Date(projectedEndMs).toISOString().split('T')[0];
-    document.getElementById('rangeDates').textContent = `${slice[0]?.date} → ${futureStr} (projected)`;
-  }
-
-  // Push rate to stat card
-  const rateEl = document.getElementById('weeklyRateVal');
-  const rateSubEl = document.getElementById('weeklyRateSub');
-  if (rateEl) {
-    rateEl.className = `stat-value ${weeklyRate > 0.005 ? 'stat-good' : weeklyRate < -0.005 ? 'stat-bad' : ''}`;
-    rateEl.textContent = `${weeklyRate > 0.005 ? '−' : weeklyRate < -0.005 ? '+' : ''}${Math.abs(weeklyRate).toFixed(2)} kg/wk`;
-    rateSubEl.textContent = `${weeklyRate > 0.005 ? '↓' : weeklyRate < -0.005 ? '↑' : ''} ${Math.abs(weeklyRate * 2.20462).toFixed(2)} lb/wk`;
-  }
-
-  // Also refresh goals with same rate (avoids stale value)
-  const goalTarget = parseFloat(document.getElementById('goalTarget').value);
-  const goalStart = parseFloat(document.getElementById('goalStart').value);
-  if (!isNaN(goalTarget) && !isNaN(goalStart) && goalStart > goalTarget && weeklyRate > 0) {
-    const weeksNeeded = (goalStart - goalTarget) / weeklyRate;
-    const targetDate = new Date();
-    targetDate.setDate(targetDate.getDate() + weeksNeeded * 7);
-    const rateDisplay = document.querySelector('#goalOutput [data-rate]');
-    if (rateDisplay) {
-      rateDisplay.textContent = `At trend rate (${weeklyRate.toFixed(2)} kg/wk)`;
-    }
-    const dateDisplay = document.querySelector('#goalOutput [data-date]');
-    if (dateDisplay) dateDisplay.textContent = targetDate.toDateString();
-  }
-
-  // Y axis min = goal target (if set and lower than data min)
-  const targetKg = parseFloat(document.getElementById('goalTarget').value);
-  const dataMin = Math.min(...vals);
-  const targetVal = !isNaN(targetKg) ? toVal(targetKg) : null;
-  const yMin = targetVal !== null ? Math.min(dataMin, targetVal) * 0.995 : undefined;
-
-  // Goal line dataset — extends to future end if projected
-  const goalLineEnd = projectedEndMs || new Date(labels[m - 1]).getTime();
-  const goalDataset = targetVal !== null ? [{
+  const goalDataset = hasTarget ? [{
     label: 'Goal',
-    data: [{x: new Date(labels[0]).getTime(), y: targetVal}, {x: goalLineEnd, y: targetVal}],
-    borderColor: '#818cf8',
-    borderWidth: 1.5,
-    borderDash: [3, 5],
-    pointRadius: 0,
-    tension: 0,
-    parsing: false,
+    data: [{x: xMin, y: toVal(m.targetKg)}, {x: xEnd, y: toVal(m.targetKg)}],
+    borderColor: '#818cf8', borderWidth: 1.5, borderDash: [3, 5], pointRadius: 0, tension: 0, parsing: false,
+  }] : [];
+  const projDataset = projData.length ? [{
+    label: p.status === 'past' ? 'Projection (stale data)' : 'Projection',
+    data: projData, borderColor: '#f59e0b', borderWidth: 1.5, borderDash: [2, 4], pointRadius: [0, 3], tension: 0, parsing: false,
   }] : [];
 
-  if (chartInstance) chartInstance.destroy();
   const ctx = document.getElementById('weightChart').getContext('2d');
   chartInstance = new Chart(ctx, {
     type: 'line',
     data: {
-      labels,
       datasets: [
         {
-          label: unit === 'kg' ? 'Weight (kg)' : 'Weight (stone)',
-          data: vals,
+          label: unit === 'kg' ? 'Weight (kg)' : 'Weight (st lb)',
+          data: points,
+          parsing: false,
           borderColor: '#6ee7b7',
           backgroundColor: 'rgba(110,231,183,0.08)',
           borderWidth: 2,
-          pointRadius: vals.length < 50 ? 4 : 2,
+          pointRadius: points.length < 50 ? 4 : 2,
           pointBackgroundColor: '#6ee7b7',
           tension: 0.3,
+          cubicInterpolationMode: 'monotone', // no overshoot between readings
           fill: true,
         },
         {
           label: 'Trend',
-          data: trendLabels.map((lbl, i) => ({x: lbl, y: trend[i]})),
-          borderColor: '#f59e0b',
-          borderWidth: 2,
-          borderDash: [5, 4],
-          pointRadius: 0,
-          tension: 0,
-          parsing: false,
+          data: trendData,
+          borderColor: '#f59e0b', borderWidth: 2, borderDash: [5, 4], pointRadius: 0, tension: 0, parsing: false,
         },
+        ...projDataset,
         ...goalDataset
       ]
     },
@@ -1972,8 +2185,13 @@ function renderChart() {
         legend: { labels: { color: '#7a7f9a', font: { family: 'DM Sans' } } },
         tooltip: {
           callbacks: {
+            title: (items) => {
+              const d = new Date(items[0].parsed.x);
+              const withTime = items[0].datasetIndex === 0 && (d.getHours() || d.getMinutes());
+              return d.toLocaleString('en-GB', withTime ? {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'} : {day:'numeric', month:'short', year:'numeric'});
+            },
             label: (ctx) => {
-              const kg = unit === 'kg' ? ctx.parsed.y : ctx.parsed.y * 6.35029;
+              const kg = unit === 'kg' ? ctx.parsed.y : ctx.parsed.y * KG_PER_STONE;
               return `${ctx.dataset.label}: ${fmtWeight(kg, 'kg')} / ${fmtStone(kg)}`;
             }
           }
@@ -1982,17 +2200,24 @@ function renderChart() {
       scales: {
         x: {
           type: 'time',
+          min: xMin,
+          max: xEnd,
           time: {
             tooltipFormat: 'yyyy-MM-dd',
-            displayFormats: { day: 'dd MMM', month: 'MMM yy', year: 'yyyy' }
+            displayFormats: { day: 'dd MMM', week: 'dd MMM', month: 'MMM yyyy', quarter: 'MMM yyyy', year: 'yyyy' }
           },
-          max: projectedEndMs || undefined,
-          ticks: { color: '#7a7f9a', maxTicksLimit: 10, font: { size: 10 }, maxRotation: 0 },
+          title: { display: true, text: 'Date', color: '#7a7f9a', font: { size: 10 } },
+          ticks: { color: '#7a7f9a', maxTicksLimit: 8, font: { size: 10 }, maxRotation: 0 },
           grid: { color: 'rgba(46,50,72,0.5)' }
         },
         y: {
-          min: yMin,
-          ticks: { color: '#7a7f9a', font: { size: 11 } },
+          min: yAxis.min,
+          max: yAxis.max,
+          title: { display: true, text: unit === 'kg' ? 'kg' : 'st lb', color: '#7a7f9a', font: { size: 10 } },
+          ticks: {
+            color: '#7a7f9a', font: { size: 11 }, stepSize: yAxis.stepSize,
+            callback: v => unit === 'kg' ? String(Math.round(v * 10) / 10) : fmtStoneTick(v)
+          },
           grid: { color: 'rgba(46,50,72,0.5)' }
         }
       }
@@ -2003,9 +2228,13 @@ function renderChart() {
 // ═══════════════════════════════════════
 // ENTRY FORM
 // ═══════════════════════════════════════
+// Which field the user typed in last decides the source of truth, so 14st 3lb is stored as
+// exactly 90.265 kg (the KG box only shows it rounded to 0.1).
+let entrySource = 'kg';
 function syncEntryFromSt() {
   const stone = parseFloat(document.getElementById('entryStone').value) || 0;
   const lbs = parseFloat(document.getElementById('entryLbs').value) || 0;
+  entrySource = 'st';
   if (stone || lbs) {
     document.getElementById('entryKg').value = stLbsToKg(stone, lbs).toFixed(1);
   }
@@ -2013,38 +2242,38 @@ function syncEntryFromSt() {
 
 function syncEntryFromKg() {
   const kg = parseFloat(document.getElementById('entryKg').value);
+  entrySource = 'kg';
   if (!isNaN(kg)) {
-    const {stone, lbs} = kgToStLbs(kg);
+    const {stone, lbs} = kgToStLbs(kg, 1);
     document.getElementById('entryStone').value = stone;
     document.getElementById('entryLbs').value = lbs.toFixed(1);
   }
 }
 
+// Every save ADDS a new reading with its own id. Nothing is matched on date or time.
 function saveEntry() {
   const date = document.getElementById('entryDate').value;
-  const kg = parseFloat(document.getElementById('entryKg').value);
-  if (!date || isNaN(kg)) {
+  let kg = parseFloat(document.getElementById('entryKg').value);
+  if (entrySource === 'st') {
+    const st = parseFloat(document.getElementById('entryStone').value) || 0;
+    const lb = parseFloat(document.getElementById('entryLbs').value) || 0;
+    if (st || lb) kg = stLbsToKg(st, lb);
+  }
+  if (!isDateStr(date) || !Number.isFinite(kg) || kg <= 0) {
     document.getElementById('entryMsg').textContent = '⚠ Please enter a date and weight.';
     return;
   }
-  const {stone, lbs} = kgToStLbs(kg);
-  const frac = lbs - Math.floor(lbs);
   const now = new Date();
-  const timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
-  const rec = {date, time: timeStr, stone: Math.floor(stone), lbs: Math.floor(lbs), frac: +frac.toFixed(2), kg};
-  const existing = weightData.findIndex(d => d.date === date && d.time === timeStr);
-  if (existing >= 0) {
-    weightData[existing] = rec;
-    document.getElementById('entryMsg').textContent = '✓ Updated existing entry.';
-  } else {
-    const sameDay = weightData.filter(d => d.date === date).length;
-    weightData.push(rec);
-    document.getElementById('entryMsg').textContent = sameDay > 0 ? `✓ Additional entry saved for ${date}.` : '✓ Entry saved!';
-  }
+  const rec = {id: newId('w'), date, ...stoneFields(kg), kg: roundTo(kg, 3), createdAt: now.toISOString()};
+  if (date === localDateStr(now)) { rec.time = localTimeStr(now); rec.ts = now.getTime(); }
+  const sameDay = weightData.filter(d => d.date === date).length;
+  weightData.push(rec);
+  document.getElementById('entryMsg').textContent = sameDay > 0 ? `✓ Saved: reading ${sameDay + 1} for ${date}.` : '✓ Entry saved!';
   // Clear form
   document.getElementById('entryStone').value = '';
   document.getElementById('entryLbs').value = '';
   document.getElementById('entryKg').value = '';
+  entrySource = 'kg';
   setTimeout(() => document.getElementById('entryMsg').textContent = '', 3000);
   renderStats();
   renderTable();
@@ -2054,52 +2283,59 @@ function saveEntry() {
 }
 
 // set today's date as default
-document.getElementById('entryDate').value = new Date().toISOString().split('T')[0];
-document.getElementById('jDate').value = new Date().toISOString().split('T')[0];
+document.getElementById('entryDate').value = localDateStr();
+document.getElementById('jDate').value = localDateStr();
 
 // ═══════════════════════════════════════
 // TABLE
 // ═══════════════════════════════════════
-let tableSortDir = -1;
+let tableSortDir = -1; // -1 = newest first
 
 function sortTable(field) {
   tableSortDir = -tableSortDir;
-  weightData.sort((a,b) => tableSortDir * a.date.localeCompare(b.date));
   renderTable();
 }
 
 function renderTable() {
   const search = document.getElementById('tableSearch').value.toLowerCase();
-  const sorted = [...weightData].sort((a,b) => b.date.localeCompare(a.date));
-  const filtered = sorted.filter(d => d.date.includes(search));
+  const asc = sortAsc(weightData);
+  // "Change" is always vs the chronologically previous reading, whatever the sort direction.
+  const prevKg = new Map(asc.map((d, i) => [d.id, i > 0 ? asc[i - 1].kg : null]));
+  const rows = (tableSortDir < 0 ? [...asc].reverse() : asc).filter(d => d.date.includes(search));
   const tbody = document.getElementById('tableBody');
-  tbody.innerHTML = filtered.map((d, i) => {
-    const prev = filtered[i+1];
-    const change = prev ? d.kg - prev.kg : null;
+  tbody.innerHTML = rows.map(d => {
+    const p = prevKg.get(d.id);
+    const change = p === null || p === undefined ? null : d.kg - p;
     const b = bmi(d.kg);
-    const {label, cls} = bmiStatus(b);
-    return `<tr id="row-${d.date}">
-      <td>${d.date}${d.time ? `<br><span style="font-size:10px;color:var(--muted)">${d.time}</span>` : ''}</td>
-      <td>${d.stone}st ${d.lbs + d.frac}lb</td>
-      <td>${(d.stone * 14 + d.lbs + d.frac).toFixed(1)} lb</td>
+    const {cls} = bmiStatus(b);
+    const id = esc(d.id);
+    return `<tr data-id="${id}">
+      <td>${esc(d.date)}${d.time ? `<br><span style="font-size:10px;color:var(--muted)">${esc(d.time)}</span>` : ''}</td>
+      <td>${fmtStone(d.kg)}</td>
+      <td>${(d.kg * LB_PER_KG).toFixed(1)} lb</td>
       <td>${d.kg.toFixed(1)}</td>
       <td><span class="pill ${cls}" style="font-size:10px;">${b.toFixed(1)}</span></td>
       <td style="color:${change === null ? 'var(--muted)' : change < 0 ? 'var(--accent)' : 'var(--accent3)'}">${change === null ? '—' : (change > 0 ? '+' : '') + change.toFixed(2) + ' kg'}</td>
-      <td id="del-${d.date}"><button class="delete-btn" onclick="confirmDelete('${d.date}')">✕</button></td>
+      <td class="del-cell"><button class="delete-btn" data-id="${id}" onclick="confirmDelete(this.dataset.id)" title="Delete this reading">✕</button></td>
     </tr>`;
   }).join('');
 }
 
-function confirmDelete(date) {
-  const cell = document.getElementById('del-' + date);
+function rowCell(id) {
+  return [...document.querySelectorAll('#tableBody tr')].find(tr => tr.dataset.id === id)?.querySelector('.del-cell');
+}
+
+function confirmDelete(id) {
+  const cell = rowCell(id);
   if (!cell) return;
   cell.innerHTML = `<span style="font-size:11px;color:var(--accent3);">Sure?</span>
-    <button class="delete-btn" style="color:var(--accent3);font-weight:700;" onclick="deleteEntry('${date}')">Yes</button>
+    <button class="delete-btn" style="color:var(--accent3);font-weight:700;" data-id="${esc(id)}" onclick="deleteEntry(this.dataset.id)">Yes</button>
     <button class="delete-btn" onclick="renderTable()">No</button>`;
 }
 
-function deleteEntry(date) {
-  weightData = weightData.filter(d => d.date !== date);
+// Deletes ONE reading (by id). Other readings on the same day are untouched.
+function deleteEntry(id) {
+  weightData = weightData.filter(d => d.id !== id);
   renderStats();
   renderTable();
   renderChart();
@@ -2107,11 +2343,12 @@ function deleteEntry(date) {
   persistAll();
 }
 
+function csvCell(v) { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
+
 function exportCSV() {
-  const sorted = [...weightData].sort((a,b) => b.date.localeCompare(a.date));
-  const rows = [['Date','Stone','Lbs','KG','BMI']];
-  sorted.forEach(d => rows.push([d.date, `${d.stone}st ${d.lbs}lb`, (d.stone*14+d.lbs+d.frac).toFixed(1), d.kg.toFixed(1), bmi(d.kg).toFixed(1)]));
-  const csv = rows.map(r => r.join(',')).join('\n');
+  const rows = [['Date','Time','Stone','Total lb','KG','BMI','Id']];
+  sortDesc(weightData).forEach(d => rows.push([d.date, d.time || '', fmtStone(d.kg), (d.kg * LB_PER_KG).toFixed(1), d.kg.toFixed(1), bmi(d.kg).toFixed(1), d.id]));
+  const csv = rows.map(r => r.map(csvCell).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
   a.download = 'weight_data.csv';
@@ -2156,72 +2393,106 @@ function setCheckin(checkin = {}) {
   document.getElementById('jQuickWin').checked = !!checkin.quickWin;
 }
 
+// Journal records: every save of a NEW entry appends a record with its own id; saving while
+// editing updates only that one record (matched by id, never by date).
+let editingJournalId = null;
+
 function saveJournal() {
   const date = document.getElementById('jDate').value;
   const comment = document.getElementById('jComment').value.trim();
   const weightVal = document.getElementById('jWeight').value;
   const notes = document.getElementById('jNotes').value.trim();
   const checkin = readCheckin();
-  if (!date || (!comment && !checkin)) {
+  if (!isDateStr(date) || (!comment && !checkin)) {
     document.getElementById('jMsg').textContent = '⚠ Date and one signal required.';
     return;
   }
-  const weight = weightVal ? parseFloat(weightVal) : null;
-  const d = new Date(date);
-  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const day = days[d.getDay()];
-  const existing = journalData.findIndex(j => j.date === date);
-  const rec = {date, day, comment, weight, notes};
-  if (checkin) rec.checkin = checkin;
-  if (pendingMealSnapshot) { rec.mealSnapshot = pendingMealSnapshot; pendingMealSnapshot = null; }
-  if (existing >= 0) journalData[existing] = rec;
-  else journalData.push(rec);
+  const w = weightVal ? parseFloat(weightVal) : NaN;
+  const weight = Number.isFinite(w) && w > 0 ? w : null;
+  const now = new Date();
+  const existing = editingJournalId ? journalData.find(j => j.id === editingJournalId) : null;
+  let rec;
+  if (existing) {
+    rec = {...existing, date, day: dayName(date), comment, weight, notes, updatedAt: now.toISOString()};
+    if (date !== existing.date) { delete rec.time; delete rec.ts; }
+    if (checkin) rec.checkin = checkin; else delete rec.checkin;
+    if (pendingMealSnapshot) rec.mealSnapshot = pendingMealSnapshot;
+    journalData = journalData.map(j => j.id === existing.id ? rec : j);
+  } else {
+    rec = {id: newId('j'), date, day: dayName(date), comment, weight, notes, createdAt: now.toISOString()};
+    if (date === localDateStr(now)) { rec.time = localTimeStr(now); rec.ts = now.getTime(); }
+    if (checkin) rec.checkin = checkin;
+    if (pendingMealSnapshot) rec.mealSnapshot = pendingMealSnapshot;
+    journalData.push(rec);
+  }
+  pendingMealSnapshot = null;
+  const sameDay = journalData.filter(j => j.date === date).length;
   clearJournalForm();
-  document.getElementById('jMsg').textContent = '✓ Entry saved!';
+  document.getElementById('jMsg').textContent = existing ? '✓ Entry updated.' : sameDay > 1 ? `✓ Saved: entry ${sameDay} for ${date}.` : '✓ Entry saved!';
   setTimeout(() => document.getElementById('jMsg').textContent = '', 3000);
   renderJournal();
+  renderOMAD();
   renderReset();
   persistAll();
 }
 
+function setJournalEditing(rec) {
+  editingJournalId = rec ? rec.id : null;
+  const banner = document.getElementById('jEditBanner');
+  const btn = document.getElementById('jSaveBtn');
+  if (banner) {
+    banner.style.display = rec ? '' : 'none';
+    banner.innerHTML = rec ? `Editing the entry from ${esc(rec.day || '')} ${esc(rec.date)}${rec.time ? ' ' + esc(rec.time) : ''}. Saving updates only this entry.
+      <button class="btn btn-ghost btn-sm" style="margin-left:8px;" onclick="clearJournalForm()">Cancel edit / new entry</button>` : '';
+  }
+  if (btn) btn.textContent = rec ? 'Update Entry' : 'Save Entry';
+}
+
 function clearJournalForm() {
-  document.getElementById('jDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('jDate').value = localDateStr();
   document.getElementById('jComment').value = '';
   document.getElementById('jWeight').value = '';
   document.getElementById('jNotes').value = '';
   setCheckin();
   pendingMealSnapshot = null;
+  setJournalEditing(null);
 }
 
-function editJournal(date) {
-  const j = journalData.find(d => d.date === date);
+function editJournal(id) {
+  const j = journalData.find(d => d.id === id);
   if (!j) return;
   document.getElementById('jDate').value = j.date;
   document.getElementById('jComment').value = j.comment || '';
   document.getElementById('jWeight').value = j.weight || '';
   document.getElementById('jNotes').value = j.notes || '';
   setCheckin(j.checkin);
+  pendingMealSnapshot = null;
+  setJournalEditing(j);
   document.querySelector('.journal-form').scrollIntoView({behavior:'smooth'});
 }
 
 function renderJournal() {
   const search = (document.getElementById('jSearch')?.value || '').toLowerCase();
-  const sorted = [...journalData].sort((a,b) => b.date.localeCompare(a.date));
+  const sorted = sortDesc(journalData);
+  const perDay = {};
+  journalData.forEach(j => { perDay[j.date] = (perDay[j.date] || 0) + 1; });
   const filtered = sorted.filter(j => {
     const checkText = j.checkin ? Object.values(j.checkin).join(' ').toLowerCase() : '';
     return !search || j.date.includes(search) || (j.comment || '').toLowerCase().includes(search) || (j.notes||'').toLowerCase().includes(search) || checkText.includes(search);
   });
-  document.getElementById('journalCount').textContent = `${filtered.length} entries`;
+  const days = new Set(filtered.map(j => j.date)).size;
+  document.getElementById('journalCount').textContent = `${filtered.length} entries · ${days} days`;
   document.getElementById('journalList').innerHTML = filtered.map(j => `
-    <div class="journal-entry ${j.weight ? 'has-weight' : ''}" onclick="editJournal('${j.date}')">
+    <div class="journal-entry ${j.weight ? 'has-weight' : ''} ${j.id === editingJournalId ? 'editing' : ''}" data-id="${esc(j.id)}" onclick="editJournal(this.dataset.id)">
       <div class="journal-entry-header">
         <div>
           <span class="journal-day">${esc(j.day)}</span>
-          <span class="journal-date"> · ${j.date}</span>
+          <span class="journal-date"> · ${esc(j.date)}${j.time ? ' · ' + esc(j.time) : ''}</span>
+          ${perDay[j.date] > 1 ? `<span class="tag" style="margin-left:6px;">${perDay[j.date]} entries this day</span>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          ${j.weight ? `<span class="journal-weight-badge">${j.weight} kg · ${fmtStone(j.weight)}</span>` : ''}
-          <button class="delete-btn" id="jdel-${j.date}" onclick="event.stopPropagation();deleteJournal('${j.date}')">✕</button>
+          ${j.weight ? `<span class="journal-weight-badge">${esc(j.weight)} kg · ${fmtStone(j.weight)}</span>` : ''}
+          <button class="delete-btn" data-id="${esc(j.id)}" onclick="event.stopPropagation();deleteJournal(this)" title="Delete this entry">✕</button>
         </div>
       </div>
       ${j.comment ? `<div class="journal-text" style="color:var(--muted);font-size:12px;">${esc(shortText(j.comment, 80))}</div>` : ''}
@@ -2230,8 +2501,8 @@ function renderJournal() {
         ${j.checkin.alcohol ? '<span class="tag">Alcohol</span>' : ''}
         ${j.checkin.exercise ? '<span class="tag">Exercise</span>' : ''}
         ${j.checkin.quickWin ? '<span class="tag">Quick win</span>' : ''}
-        ${j.checkin.foodNoise ? `<span class="tag">Noise ${j.checkin.foodNoise}/5</span>` : ''}
-        ${j.checkin.energy ? `<span class="tag">Energy ${j.checkin.energy}/5</span>` : ''}
+        ${j.checkin.foodNoise ? `<span class="tag">Noise ${esc(j.checkin.foodNoise)}/5</span>` : ''}
+        ${j.checkin.energy ? `<span class="tag">Energy ${esc(j.checkin.energy)}/5</span>` : ''}
         ${j.checkin.winTag ? `<span class="tag">${esc(j.checkin.winTag)}</span>` : ''}
       </div>` : ''}
       ${j.notes ? `<div class="journal-notes">${esc(j.notes)}</div>` : ''}
@@ -2239,12 +2510,15 @@ function renderJournal() {
   `).join('');
 }
 
-function deleteJournal(date) {
-  const btn = document.getElementById('jdel-' + date);
-  if (!btn) return;
+// Two-tap delete of ONE entry (by id). Other entries on the same date are untouched.
+function deleteJournal(btn) {
+  const id = btn && btn.dataset.id;
+  if (!id) return;
   if (btn.dataset.confirming) {
-    journalData = journalData.filter(j => j.date !== date);
+    journalData = journalData.filter(j => j.id !== id);
+    if (editingJournalId === id) clearJournalForm();
     renderJournal();
+    renderOMAD();
     renderReset();
     persistAll();
   } else {
@@ -2262,29 +2536,27 @@ const mealQtys = {};
 let omadCatFilter = null;
 let omadMealsExpanded = false;
 let pendingMealSnapshot = null;
-const recentMealSnapshotsByDate = {};
+const recentMealSnapshotsById = {};
 
 function renderOMAD() {
   const cats = [...new Set(omadFoods.map(f => f.cat))];
 
   // Recent meals panel
-  const mealsWithSnap = journalData
-    .filter(j => j.mealSnapshot && j.mealSnapshot.length > 0)
-    .sort((a, b) => b.date.localeCompare(a.date));
-  Object.keys(recentMealSnapshotsByDate).forEach(k => delete recentMealSnapshotsByDate[k]);
-  mealsWithSnap.forEach(j => { recentMealSnapshotsByDate[j.date] = j.mealSnapshot; });
+  const mealsWithSnap = sortDesc(journalData.filter(j => j.mealSnapshot && j.mealSnapshot.length > 0));
+  Object.keys(recentMealSnapshotsById).forEach(k => delete recentMealSnapshotsById[k]);
+  mealsWithSnap.forEach(j => { recentMealSnapshotsById[j.id] = j.mealSnapshot; });
 
   let recentMealsHtml = '';
   if (mealsWithSnap.length > 0) {
     const shown = omadMealsExpanded ? mealsWithSnap : mealsWithSnap.slice(0, 5);
     const chips = shown.map(j => {
-      const calMatch = j.comment.match(/\((\d+) cal\)/);
+      const calMatch = (j.comment || '').match(/\((\d+) cal\)/);
       const cal = calMatch ? calMatch[1] : '?';
       const preview = j.mealSnapshot.map(s => `${s.qty}× ${s.name}`).slice(0, 3).join(', ') + (j.mealSnapshot.length > 3 ? '…' : '');
       return `
-        <button class="meal-chip" data-date="${j.date}" onclick="loadMealSnapshotByDate(this.dataset.date)">
+        <button class="meal-chip" data-id="${esc(j.id)}" onclick="loadMealSnapshotById(this.dataset.id)">
           <div>
-            <span class="meal-chip-date">${esc(j.day)} ${j.date}</span>
+            <span class="meal-chip-date">${esc(j.day)} ${esc(j.date)}${j.time ? ' ' + esc(j.time) : ''}</span>
             <div class="meal-chip-preview">${esc(preview)}</div>
           </div>
           <span class="meal-chip-cal">${cal} cal</span>
@@ -2324,11 +2596,11 @@ function renderOMAD() {
               <div class="food-name">${esc(f.name)}</div>
               <div class="food-meta">${esc(f.serving)}</div>
             </div>
-            <div style="font-size:11px;color:var(--muted);">P:${f.protein}g F:${f.fat}g C:${f.carbs}g</div>
-            <div class="food-cals">${f.cals} cal</div>
+            <div style="font-size:11px;color:var(--muted);">P:${esc(f.protein)}g F:${esc(f.fat)}g C:${esc(f.carbs)}g</div>
+            <div class="food-cals">${esc(f.cals)} cal</div>
             <div class="qty-stepper">
               <button data-key="${esc(key)}" data-delta="-0.5" onclick="stepQtyFromEl(this)">−</button>
-              <span class="qty-display ${qty > 0 ? 'has-qty' : ''}" id="qty-display-${key}">${qtyStr}</span>
+              <span class="qty-display ${qty > 0 ? 'has-qty' : ''}" id="qty-display-${esc(key)}">${qtyStr}</span>
               <button data-key="${esc(key)}" data-delta="0.5" onclick="stepQtyFromEl(this)">+</button>
             </div>
           </div>`;
@@ -2374,14 +2646,24 @@ function toggleMealsExpanded() {
   renderOMAD();
 }
 
-function loadMealSnapshotByDate(date) {
-  const snap = recentMealSnapshotsByDate[date];
+function loadMealSnapshotById(id) {
+  const snap = recentMealSnapshotsById[id];
   if (snap) loadMealSnapshot(snap);
+}
+
+function foodKeyFor(food) {
+  const fi = omadFoods.filter(f => f.cat === food.cat).indexOf(food);
+  return `${food.cat}-${fi}`;
 }
 
 function loadMealSnapshot(snapshot) {
   Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
-  snapshot.forEach(({key, qty}) => { if (qty > 0) mealQtys[key] = qty; });
+  // Resolve by food name first: keys are category-position based and shift when foods are edited.
+  snapshot.forEach(({key, name, qty}) => {
+    if (!(qty > 0)) return;
+    const food = name ? omadFoods.find(f => f.name === name) : null;
+    mealQtys[food ? foodKeyFor(food) : key] = qty;
+  });
   renderOMAD();
   updateTotals();
 }
@@ -2447,7 +2729,9 @@ function logMealToJournal() {
   const totCals = parseInt(document.getElementById('totCals').textContent);
   const summary = `OMAD Meal (${totCals} cal):\n` + items.join(', ');
   pendingMealSnapshot = snapshot;
-  document.getElementById('jDate').value = new Date().toISOString().split('T')[0];
+  clearJournalForm(); // a logged meal is always a NEW journal entry
+  pendingMealSnapshot = snapshot;
+  document.getElementById('jDate').value = localDateStr();
   document.getElementById('jComment').value = summary;
   showPage('journal');
   document.querySelector('.journal-form').scrollIntoView({behavior: 'smooth'});
@@ -2479,11 +2763,11 @@ function renderFoodEditorTable() {
       <td style="padding:7px 10px;font-size:12px;">${esc(f.cat)}</td>
       <td style="padding:7px 10px;font-size:12px;">${esc(f.name)}</td>
       <td style="padding:7px 10px;font-size:12px;color:var(--muted);">${esc(f.serving)}</td>
-      <td style="padding:7px 10px;font-size:12px;text-align:right;color:var(--accent2);">${f.cals}</td>
-      <td style="padding:7px 10px;font-size:12px;text-align:right;">${f.protein}</td>
-      <td style="padding:7px 10px;font-size:12px;text-align:right;">${f.fat}</td>
-      <td style="padding:7px 10px;font-size:12px;text-align:right;">${f.carbs}</td>
-      <td style="padding:7px 10px;font-size:12px;text-align:right;">${f.fibre}</td>
+      <td style="padding:7px 10px;font-size:12px;text-align:right;color:var(--accent2);">${esc(f.cals)}</td>
+      <td style="padding:7px 10px;font-size:12px;text-align:right;">${esc(f.protein)}</td>
+      <td style="padding:7px 10px;font-size:12px;text-align:right;">${esc(f.fat)}</td>
+      <td style="padding:7px 10px;font-size:12px;text-align:right;">${esc(f.carbs)}</td>
+      <td style="padding:7px 10px;font-size:12px;text-align:right;">${esc(f.fibre)}</td>
       <td style="padding:7px 6px;text-align:right;" id="fdel-${i}">
         <button class="delete-btn" onclick="editFoodInline(${i})" title="Edit">✎</button>
         <button class="delete-btn" onclick="confirmFoodDelete(${i})" title="Delete">✕</button>
@@ -2496,7 +2780,7 @@ function confirmFoodDelete(i) {
   const cell = document.getElementById('fdel-' + i);
   if (!cell) return;
   cell.innerHTML = `<span style="font-size:11px;color:var(--accent3);">Sure?</span>
-    <button class="delete-btn" style="color:var(--accent3);font-weight:700;" onclick="deleteFoodItem(\${i})">Yes</button>
+    <button class="delete-btn" style="color:var(--accent3);font-weight:700;" onclick="deleteFoodItem(${i})">Yes</button>
     <button class="delete-btn" onclick="renderFoodEditorTable()">No</button>`;
 }
 
@@ -2507,11 +2791,11 @@ function editFoodInline(i) {
     <td style="padding:4px 6px;"><input class="food-qty" style="width:120px;" value="${esc(f.cat)}" id="ef-cat-${i}"></td>
     <td style="padding:4px 6px;"><input class="food-qty" style="width:130px;" value="${esc(f.name)}" id="ef-name-${i}"></td>
     <td style="padding:4px 6px;"><input class="food-qty" style="width:90px;" value="${esc(f.serving)}" id="ef-serving-${i}"></td>
-    <td style="padding:4px 6px;"><input class="food-qty" style="width:55px;" type="number" value="${f.cals}" id="ef-cals-${i}"></td>
-    <td style="padding:4px 6px;"><input class="food-qty" style="width:45px;" type="number" step="0.1" value="${f.protein}" id="ef-protein-${i}"></td>
-    <td style="padding:4px 6px;"><input class="food-qty" style="width:45px;" type="number" step="0.1" value="${f.fat}" id="ef-fat-${i}"></td>
-    <td style="padding:4px 6px;"><input class="food-qty" style="width:45px;" type="number" step="0.1" value="${f.carbs}" id="ef-carbs-${i}"></td>
-    <td style="padding:4px 6px;"><input class="food-qty" style="width:45px;" type="number" step="0.1" value="${f.fibre}" id="ef-fibre-${i}"></td>
+    <td style="padding:4px 6px;"><input class="food-qty" style="width:55px;" type="number" value="${esc(f.cals)}" id="ef-cals-${i}"></td>
+    <td style="padding:4px 6px;"><input class="food-qty" style="width:45px;" type="number" step="0.1" value="${esc(f.protein)}" id="ef-protein-${i}"></td>
+    <td style="padding:4px 6px;"><input class="food-qty" style="width:45px;" type="number" step="0.1" value="${esc(f.fat)}" id="ef-fat-${i}"></td>
+    <td style="padding:4px 6px;"><input class="food-qty" style="width:45px;" type="number" step="0.1" value="${esc(f.carbs)}" id="ef-carbs-${i}"></td>
+    <td style="padding:4px 6px;"><input class="food-qty" style="width:45px;" type="number" step="0.1" value="${esc(f.fibre)}" id="ef-fibre-${i}"></td>
     <td style="padding:4px 6px;">
       <button class="btn btn-sm" onclick="saveFoodEdit(${i})">✓</button>
       <button class="btn btn-ghost btn-sm" onclick="renderFoodEditorTable()">✕</button>
@@ -2519,8 +2803,25 @@ function editFoodInline(i) {
   `;
 }
 
+// mealQtys keys are `${cat}-${indexWithinCategory}`; editing/deleting a food shifts them.
+// Capture qty per food object before the change and re-key afterwards.
+function mutateFoods(fn) {
+  const qtyByFood = new Map();
+  omadFoods.forEach(f => { const q = mealQtys[foodKeyFor(f)]; if (q > 0) qtyByFood.set(f, q); });
+  const replaced = fn(); // may return [oldFood, newFood]
+  if (replaced && qtyByFood.has(replaced[0])) { qtyByFood.set(replaced[1], qtyByFood.get(replaced[0])); qtyByFood.delete(replaced[0]); }
+  Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
+  qtyByFood.forEach((q, f) => { if (omadFoods.includes(f)) mealQtys[foodKeyFor(f)] = q; });
+}
+
 function saveFoodEdit(i) {
-  omadFoods[i] = {
+  mutateFoods(() => { const old = omadFoods[i]; omadFoods[i] = readFoodEdit(i); return [old, omadFoods[i]]; });
+  renderFoodEditorTable();
+  refreshCatSuggestions();
+}
+
+function readFoodEdit(i) {
+  return {
     cat: document.getElementById(`ef-cat-${i}`).value.trim().toUpperCase(),
     name: document.getElementById(`ef-name-${i}`).value.trim(),
     serving: document.getElementById(`ef-serving-${i}`).value.trim(),
@@ -2530,12 +2831,10 @@ function saveFoodEdit(i) {
     carbs: parseFloat(document.getElementById(`ef-carbs-${i}`).value) || 0,
     fibre: parseFloat(document.getElementById(`ef-fibre-${i}`).value) || 0,
   };
-  renderFoodEditorTable();
-  refreshCatSuggestions();
 }
 
 function deleteFoodItem(i) {
-  omadFoods.splice(i, 1);
+  mutateFoods(() => { omadFoods.splice(i, 1); });
   renderFoodEditorTable();
   refreshCatSuggestions();
 }
@@ -2553,7 +2852,7 @@ function addFoodItem() {
     document.getElementById('foodEditorMsg').textContent = '⚠ Category and name required.';
     return;
   }
-  omadFoods.push({cat, name, serving, cals, protein, fat, carbs, fibre});
+  mutateFoods(() => { omadFoods.push({cat, name, serving, cals, protein, fat, carbs, fibre}); });
   // Clear form
   ['newFoodCat','newFoodName','newFoodServing','newFoodCals','newFoodProtein','newFoodFat','newFoodCarbs','newFoodFibre']
     .forEach(id => document.getElementById(id).value = '');
@@ -2571,7 +2870,7 @@ function exportJSON() {
   const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `weight-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+  a.download = `weight-tracker-backup-${localDateStr()}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -2583,8 +2882,8 @@ function importJSON(event) {
   reader.onload = e => {
     try {
       const data = JSON.parse(e.target.result);
-      // Validate it looks right
-      if (!data.weightData || !data.journalData) {
+      // Validate it looks right (arrays, or Firebase-style keyed objects)
+      if (!data || typeof data.weightData !== 'object' || typeof data.journalData !== 'object' || !data.weightData || !data.journalData) {
         showImportMsg('⚠ Invalid backup file — missing data sections.', true);
         return;
       }
@@ -2601,19 +2900,22 @@ function importJSON(event) {
 let pendingImport = null;
 
 function showImportChoice(data) {
+  data.weightData = normalizeWeightEntries(data.weightData);
+  data.journalData = normalizeJournalEntries(data.journalData);
   pendingImport = data;
-  const wCount = data.weightData ? data.weightData.length : 0;
-  const jCount = data.journalData ? data.journalData.length : 0;
+  const wCount = data.weightData.length;
+  const jCount = data.journalData.length;
   const dateStr = data.exported ? data.exported.split('T')[0] : 'unknown date';
   document.getElementById('importModalMsg').innerHTML =
-    `Found <b>${wCount}</b> weight records and <b>${jCount}</b> journal entries from <b>${dateStr}</b>.<br><br>
+    `Found <b>${wCount}</b> weight records and <b>${jCount}</b> journal entries from <b>${esc(dateStr)}</b>.<br><br>
     <b>Replace All</b> — overwrites your current data.<br>
-    <b>Merge</b> — adds records not already present (safe, no duplicates).`;
+    <b>Merge</b> — adds every record that isn't already here (matched by id and content). Nothing existing is overwritten; several entries on one day are all kept.`;
   const modal = document.getElementById('importModal');
   modal.style.display = 'flex';
 }
 
 function applyImport(mode) {
+  if (mode === 'replace' && !confirm('Replace ALL current weight and journal data with the backup?')) return;
   const data = pendingImport;
   if (!data) return;
   if (mode === 'replace') {
@@ -2623,11 +2925,12 @@ function applyImport(mode) {
     Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
     if (data.mealQtys) Object.assign(mealQtys, data.mealQtys);
   } else {
-    // Merge: add records not already present (by date)
-    const wDates = new Set(weightData.map(d => d.date));
-    data.weightData.forEach(d => { if (!wDates.has(d.date)) weightData.push(d); });
-    const jDates = new Set(journalData.map(d => d.date));
-    data.journalData.forEach(d => { if (!jDates.has(d.date)) journalData.push(d); });
+    // Merge: lossless, by id + content (never by date)
+    const wm = mergeEntries(weightData, data.weightData, 'weight');
+    const jm = mergeEntries(journalData, data.journalData, 'journal');
+    weightData = wm.list;
+    journalData = jm.list;
+    mode = `merge: +${wm.added} weight, +${jm.added} journal`;
     if (data.omadFoods) {
       const existing = new Set(omadFoods.map(f => f.name));
       data.omadFoods.forEach(f => { if (!existing.has(f.name)) omadFoods.push(f); });
@@ -2679,7 +2982,7 @@ function showSaveError(msg) {
 
 function currentBackup() {
   return {
-    version: 3,
+    version: 4, // v4: every weight/journal record has a unique id; several per day allowed
     exported: new Date().toISOString(),
     savedBy: 'browser-localStorage',
     phases: PHASES,
@@ -2691,13 +2994,32 @@ function currentBackup() {
     chartRangeStart,
     chartRangeEnd,
     chartRangeUserSet,
+    currentUnit,
+    goalStart: document.getElementById('goalStart')?.value || '',
+    goalTarget: document.getElementById('goalTarget')?.value || '',
+    calTarget: document.getElementById('calTarget')?.value || '',
   };
 }
 
+let goalPersistTimer = null;
+function scheduleGoalPersist() {
+  clearTimeout(goalPersistTimer);
+  goalPersistTimer = setTimeout(() => persistAll(), 600);
+}
+
+function applyGoalPrefs(p) {
+  const gs = document.getElementById('goalStart'), gt = document.getElementById('goalTarget'), ct = document.getElementById('calTarget');
+  if (p.goalStart && gs) gs.value = p.goalStart;
+  if (p.goalTarget && gt) gt.value = p.goalTarget;
+  if (p.calTarget && ct) ct.value = p.calTarget;
+  if (p.currentUnit === 'kg' || p.currentUnit === 'st') { currentUnit = p.currentUnit; syncUnitToggle(); }
+}
+
 function applyLoadedData(data) {
-  if (!data || !Array.isArray(data.weightData) || !Array.isArray(data.journalData)) return false;
-  weightData = data.weightData;
-  journalData = data.journalData;
+  if (!data || !data.weightData || !data.journalData || typeof data.weightData !== 'object' || typeof data.journalData !== 'object') return false;
+  // Migration: v3 data (date-keyed journal, no ids) is converted losslessly here.
+  weightData = normalizeWeightEntries(data.weightData);
+  journalData = normalizeJournalEntries(data.journalData);
   if (Array.isArray(data.omadFoods)) {
     omadFoods.length = 0;
     data.omadFoods.forEach(f => omadFoods.push(f));
@@ -2705,6 +3027,7 @@ function applyLoadedData(data) {
   Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
   if (data.mealQtys && typeof data.mealQtys === 'object') Object.assign(mealQtys, data.mealQtys);
   trueStartKg = (typeof data.trueStartKg === 'number') ? data.trueStartKg : null;
+  applyGoalPrefs(data);
   // Restore chart range — only if user had explicitly set it (absent = legacy/unset)
   if (data.chartRangeUserSet && typeof data.chartRangeStart === 'number') {
     chartRangeStart = data.chartRangeStart;
@@ -2777,6 +3100,7 @@ const FIREBASE_URL = 'https://paymind-b1d51-default-rtdb.europe-west1.firebaseda
 let firebaseDB = null;
 let fbUser = localStorage.getItem('weightUser') || '';
 let fbSyncing = false;
+let fbSyncAgain = false; // a change arrived while a sync was in flight
 let pendingFbUser = '';
 
 function initFirebase() {
@@ -2809,11 +3133,13 @@ async function loadFromFirebase() {
     const snap = await firebaseDB.ref(`/health/${fbUser}`).once('value');
     const data = snap.val();
     if (!data) return false;
+    // Old layout: journal keyed by date, weights by date or date_HHMM. New layout: keyed by id.
+    // Both load the same way; ids are assigned deterministically to old records.
     if (data.weightData && typeof data.weightData === 'object') {
-      weightData = Object.values(data.weightData).filter(d => d && d.date);
+      weightData = normalizeWeightEntries(data.weightData);
     }
     if (data.journalData && typeof data.journalData === 'object') {
-      journalData = Object.values(data.journalData).filter(j => j && j.date);
+      journalData = normalizeJournalEntries(data.journalData);
     }
     if (data.omadFoods && typeof data.omadFoods === 'object') {
       const foods = Object.values(data.omadFoods).filter(Boolean);
@@ -2836,16 +3162,8 @@ async function loadFromFirebase() {
           Object.assign(mealQtys, mq);
         } catch(e) {}
       }
-      // Restore goal inputs after DOM is ready
-      if (p.goalStart || p.goalTarget) {
-        setTimeout(() => {
-          const gs = document.getElementById('goalStart');
-          const gt = document.getElementById('goalTarget');
-          if (gs && !gs.value && p.goalStart) gs.value = p.goalStart;
-          if (gt && !gt.value && p.goalTarget) gt.value = p.goalTarget;
-          updateGoals();
-        }, 200);
-      }
+      if (p.chartRangeUserSet) chartSmartDefaultDone = true;
+      applyGoalPrefs(p);
     }
     return true;
   } catch (e) {
@@ -2855,16 +3173,14 @@ async function loadFromFirebase() {
 }
 
 function syncToFirebase() {
-  if (!firebaseDB || !fbUser || fbSyncing) return;
+  if (!firebaseDB || !fbUser) return;
+  if (fbSyncing) { fbSyncAgain = true; return; }
   fbSyncing = true;
+  fbSyncAgain = false;
   // Arrays must be keyed objects in Firebase (no arrays allowed)
-  const weightObj = {};
-  weightData.forEach(d => {
-    const key = d.time ? `${d.date}_${d.time.replace(':','')}` : d.date;
-    weightObj[key] = d;
-  });
-  const journalObj = {};
-  journalData.forEach(j => { journalObj[j.date] = j; });
+  // Keyed by record id (was: journal by date, so same-day entries collapsed to one on sync).
+  const weightObj = toKeyedObject(weightData);
+  const journalObj = toKeyedObject(journalData);
   const omadObj = {};
   omadFoods.forEach((f, i) => { omadObj[`f${String(i).padStart(4,'0')}`] = f; });
   // Preferences — goals read from DOM
@@ -2878,12 +3194,14 @@ function syncToFirebase() {
     trueStartKg: trueStartKg !== null ? trueStartKg : null,
     goalStart: goalStartEl ? goalStartEl.value : null,
     goalTarget: goalTargetEl ? goalTargetEl.value : null,
+    calTarget: document.getElementById('calTarget')?.value || null,
     mealQtys: JSON.stringify(mealQtys),
   };
   firebaseDB.ref(`/health/${fbUser}`).set({ weightData: weightObj, journalData: journalObj, omadFoods: omadObj, prefs })
     .then(() => {
       fbSyncing = false;
       updateSyncBadge('☁ Synced', 'var(--accent)');
+      if (fbSyncAgain) syncToFirebase();
     })
     .catch(e => {
       fbSyncing = false;
@@ -2980,6 +3298,13 @@ function uploadCurrentData() {
   setTimeout(closeUserModal, 1800);
 }
 
+function resetViewState() {
+  ['goalStart', 'goalTarget'].forEach(id => { document.getElementById(id).value = ''; });
+  trueStartKg = null;
+  chartRangeStart = 0; chartRangeEnd = 100; chartRangeUserSet = false; chartSmartDefaultDone = false;
+  editingJournalId = null;
+}
+
 function startFresh() {
   // Commit the pending username now that user has explicitly chosen
   fbUser = pendingFbUser;
@@ -2988,6 +3313,7 @@ function startFresh() {
   initFirebase();
   weightData = [];
   journalData = [];
+  resetViewState();
   Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
   renderStats(); renderTable(); renderChart(); renderJournal(); renderOMAD(); updateGoals(); renderReset();
   persistAll();
@@ -3028,6 +3354,7 @@ function clearLocalData() {
   localStorage.removeItem(STORAGE_KEY);
   weightData = [];
   journalData = [];
+  resetViewState();
   Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
   renderStats(); renderTable(); renderChart(); renderJournal(); renderOMAD(); updateGoals(); renderReset();
   updateUserDisplay();
@@ -3053,6 +3380,7 @@ async function deleteAccount() {
     localStorage.removeItem(STORAGE_KEY);
     weightData = [];
     journalData = [];
+    resetViewState();
     Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
     renderStats(); renderTable(); renderChart(); renderJournal(); renderOMAD(); updateGoals(); renderReset();
     updateUserDisplay();
