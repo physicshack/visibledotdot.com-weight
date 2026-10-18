@@ -10,7 +10,7 @@ _Last updated: 2026-06-18. Maintained by Claude / Codex — update after each si
 It is a companion product to visible.. (finance).
 
 Target user: an adult who wants calm, factual, non-shaming tools to manage their weight.
-No gamification, no streaks, no guilt. Same design philosophy as the finance app.
+No gamification, no streaks, no guilt. (There is no streak logic in the app.) Same design philosophy as the finance app.
 
 ---
 
@@ -52,47 +52,13 @@ No gamification, no streaks, no guilt. Same design philosophy as the finance app
 
 ## Data Schema
 
-### `weightTrackerData` (localStorage)
+**See `README.md` → "Data model (v4)" for the full schema and the v3 → v4 migration.** Summary:
 
-```json
-{
-  "weightData": [
-    { "date": "2026-04-27", "stone": 14, "lbs": 3, "frac": 0.2, "kg": 90.1 }
-  ],
-  "journalData": [
-    {
-      "date": "2026-04-27",
-      "day": "Sun",
-      "comment": "Felt good",
-      "weight": 90.1,
-      "notes": "",
-      "checkin": {
-        "hunger": 3, "foodNoise": 2, "energy": 4, "focus": 4, "sleep": 3,
-        "winTag": "", "omadKept": true, "alcohol": false,
-        "exercise": true, "quickWin": false
-      }
-    }
-  ],
-  "omadFoods": [ ... ],
-  "mealQtys": { "Protein-0": 1.5 },
-  "currentUnit": "kg",
-  "calTarget": 1500,
-  "chartRangeStart": 0,
-  "chartRangeEnd": 100,
-  "goalStart": 90.1,
-  "goalTarget": 76.2
-}
-```
+- `localStorage['weightTrackerData']` holds `{version: 4, weightData[], journalData[], omadFoods[], mealQtys, trueStartKg, chartRange*, currentUnit, goalStart, goalTarget, calTarget}`.
+- Every weight reading and journal record has a unique `id` (plus `createdAt`, and `time`/`ts` when entered for today). **The date is not a key**: any number of records per day.
+- v3 records (no id; journal one-per-date) are migrated losslessly on load with deterministic ids `j-<date>-<n>` / `w-<date>-<HHMM|na>-<n>`.
 
-> **Schema constraint**: Never change `weightTrackerData` key or restructure without explicit
-> human instruction. Existing user data would be silently lost on schema change.
-
-### Weight entry with timestamp (added 2026-06-08)
-Multiple readings on the same day are now stored with a `time` field (`HH:MM`):
-```json
-{ "date": "2026-06-08", "time": "08:30", "stone": 14, "lbs": 3, "frac": 0.2, "kg": 90.1 }
-```
-Legacy entries without `time` are unaffected.
+> **Schema constraint**: never change the `weightTrackerData` key. Structural changes must be additive and migrated in `normalizeWeightEntries` / `normalizeJournalEntries`.
 
 ---
 
@@ -109,22 +75,19 @@ under that path. User `davejfowler` has 52 weight entries + 100+ journal entries
 
 ## Maths Reference
 
-| Metric | Formula | Notes |
-|---|---|---|
-| BMI | `kg / HEIGHT_M²` | HEIGHT_M = 1.7272m (5'8") |
-| BMI goal weight | `24.9 × HEIGHT_M²` = 74.3 kg | Upper edge of "Normal" |
-| Trend rate | OLS regression of visible slice, slope scaled to real calendar days | Uses index-based OLS, converts to kg/week via real day-span |
-| Weekly rate | `(slope_per_index × 7) / real_days_per_index` | Sign: negative = losing weight |
-| Goal date | `today + (goalStart − goalTarget) / weeklyRate × 7` | Weeks needed × 7 days |
-| Since Last | `latest.kg − prev.kg` | Negative = lost weight (shown with stat-good green) |
-| Total Lost | `oldest.kg − latest.kg` | Positive = net loss since first entry |
-| Last 30 Days | `oldest_30d.kg − latest.kg` | Positive = net loss — **note: sign opposite to Since Last** |
+Full definitions are in `README.md` → "Maths". All helpers live in the `@pure` block of `index.html` and are covered by `tests/run-tests.js`.
 
-### Known maths issues (pending review in task-queue)
+| Metric | Formula |
+|---|---|
+| BMI | `kg / HEIGHT_M²`, HEIGHT_M = 1.7272 m; category from the displayed 1-dp value |
+| Trend rate | OLS of daily-mean kg on **real calendar days** over the visible slider range; kg/wk = slope × 7 |
+| Goal date | extend the same regression line from its end point (last visible day) to the target; first whole day on/after the crossing |
+| Since Last | latest − previous reading by timestamp (negative = loss) |
+| Total Lost | baseline − latest; baseline = true start, else first reading on/after `BASELINE_FROM` (2026-01-01). Same on Tracker and Reset |
+| Last 30 Days | readings dated today−29 … today: last − first (negative = loss) |
+| Progress | (start − latest)/(start − target), clamped 0–100 % |
 
-- **Sign inconsistency**: "Last 30 Days" uses `oldest − latest` (positive = good) while "Since Last" uses `latest − prev` (negative = good). Both display correctly with colour coding but the sign convention differs. Should be unified.
-- **Trend line visual**: OLS uses indices (equally spaced) rather than calendar days for the regression x-axis. The chart x-axis is correctly `type: 'time'` so data points are spaced by real dates, but the trend endpoints are pinned to index 0 and index n−1, which means the line is visually accurate only when entries are evenly spaced.
-- **Goals DOM coupling**: `updateGoals()` reads `weeklyRateVal` text from the DOM using a regex. This is fragile — rate is formatted as `−0.52 kg/wk`. Works while the format is stable.
+Audit of 18 Oct 2026 (PR "Audit: maths, graph, projection + multi-entry journal") replaced the index-based regression, the projection that was drawn from the first trend point to goal date + 7 days, and the DOM-parsed goal rate. The "known issues" listed here before are fixed.
 
 ---
 
@@ -146,7 +109,7 @@ under that path. User `davejfowler` has 52 weight entries + 100+ journal entries
 | Framework | None — vanilla JS, single HTML file |
 | Charts | Chart.js 4.4.0 (CDN) + chartjs-adapter-date-fns 3.x |
 | Fonts | DM Serif Display, DM Sans (Google Fonts) |
-| Storage | localStorage (primary) + Firebase RTDB (planned) |
+| Storage | localStorage (primary) + Firebase RTDB (live, username sync) |
 | Deployment | Fasthosts FTP → `visibledotdot.com/weight.html` |
 | Sandbox | `physicshack.github.io/visibledotdot.com-weight` |
 
@@ -160,3 +123,4 @@ under that path. User `davejfowler` has 52 weight entries + 100+ journal entries
 | V3.1 | 2026-06-08 | Chart x-axis fix, OMAD nav fix, multi-record/day support |
 | V3.2 | 2026-06-08 | Firebase sync live, username auth, davejfowler data imported |
 | V3.3 | 2026-06-18 | Smart chart start date — auto-detects peak weight for default view |
+| V4 | 2026-10-18 | Unique-id records: unlimited journal entries per day + migration; time-based trend/projection; tests |
