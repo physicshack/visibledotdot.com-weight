@@ -2130,8 +2130,10 @@ function renderChart() {
     projData = [{x: x0, y: toVal(p.anchor.kg)}, {x: x1, y: toVal(m.targetKg)}];
     xMax = x1 + 7 * DAY_MS;
   }
-  const xMin = Math.min(points[0].x, trendData.length ? trendData[0].x : Infinity);
-  const xEnd = xMax || Math.max(points[points.length - 1].x, trendData.length ? trendData[1].x : -Infinity);
+  const xFirst = Math.min(points[0].x, trendData.length ? trendData[0].x : Infinity);
+  const xLast = xMax || Math.max(points[points.length - 1].x, trendData.length ? trendData[1].x : -Infinity);
+  const xPad = Math.max(DAY_MS / 2, (xLast - xFirst) * 0.015); // so end points aren't clipped by the axis
+  const xMin = xFirst - xPad, xEnd = xLast + (xMax ? 0 : xPad);
 
   rangeDatesEl.textContent = `${first.date} → ${last.date}` + (projData.length ? ` · projected to ${p.goalDate}` : '');
 
@@ -2202,7 +2204,7 @@ function renderChart() {
           max: xEnd,
           time: {
             tooltipFormat: 'yyyy-MM-dd',
-            displayFormats: { day: 'dd MMM', week: 'dd MMM', month: 'MMM yy', quarter: 'MMM yy', year: 'yyyy' }
+            displayFormats: { day: 'dd MMM', week: 'dd MMM', month: 'MMM yyyy', quarter: 'MMM yyyy', year: 'yyyy' }
           },
           title: { display: true, text: 'Date', color: '#7a7f9a', font: { size: 10 } },
           ticks: { color: '#7a7f9a', maxTicksLimit: 8, font: { size: 10 }, maxRotation: 0 },
