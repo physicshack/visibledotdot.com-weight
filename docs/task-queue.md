@@ -73,7 +73,7 @@ _(none — all 8 tasks from the initial brief are in PRs, see Done below)_
 
 ---
 
-- [x] **Audit: maths, graph scales, sliders, projection + multi-entry journal** | branch `grok/audit-multi-entry-journal` | 2026-10-18
+- [x] **Audit: maths, graph scales, sliders, projection + multi-entry journal** | PR #11 `grok/audit-multi-entry-journal` | 2026-10-18
   - Unique-id records, lossless migration, per-entry edit/delete, Firebase keyed by id
   - Time-based OLS trend on daily means; projection from the trend end; tests (node + numpy + playwright)
   - README created (files, data model, maths, deploy)

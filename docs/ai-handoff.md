@@ -7,7 +7,7 @@ Always read this before doing any work. Update the Current Status section after 
 
 ## Current Status
 
-_Last updated: 2026-10-18 after the maths/graph/journal audit PR (see below)._
+_Last updated: 2026-10-18 after PR #11 (maths/graph/journal audit)._
 
 - Sandbox (GitHub Pages, auto-deploys from `main`): `https://physicshack.github.io/visibledotdot.com-weight/`
 - Production `https://visibledotdot.com/weight.html` is **behind main**: it is an older, localStorage-only
@@ -17,7 +17,7 @@ _Last updated: 2026-10-18 after the maths/graph/journal audit PR (see below)._
 - Tests: `node tests/run-tests.js`, `python3 tests/independent_check.py`, `python3 tests/browser_check.py`
 - README now exists (files, data model, maths, deploy)
 
-### Audit PR (2026-10-18): maths, graph, projection + multi-entry journal
+### PR #11 (2026-10-18): audit — maths, graph, projection + multi-entry journal
 - Journal saves never overwrite: every record has a unique id; unlimited entries per day; per-entry
   edit/delete; lossless v3 → v4 migration (deterministic legacy ids); Firebase keyed by id.
 - Trend = OLS on real days over daily means (was on entry index). Projection continues the trend

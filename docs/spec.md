@@ -87,7 +87,7 @@ Full definitions are in `README.md` → "Maths". All helpers live in the `@pure`
 | Last 30 Days | readings dated today−29 … today: last − first (negative = loss) |
 | Progress | (start − latest)/(start − target), clamped 0–100 % |
 
-Audit of 18 Oct 2026 (PR "Audit: maths, graph, projection + multi-entry journal") replaced the index-based regression, the projection that was drawn from the first trend point to goal date + 7 days, and the DOM-parsed goal rate. The "known issues" listed here before are fixed.
+Audit of 18 Oct 2026 (PR #11) replaced the index-based regression, the projection that was drawn from the first trend point to goal date + 7 days, and the DOM-parsed goal rate. The "known issues" listed here before are fixed.
 
 ---
 
