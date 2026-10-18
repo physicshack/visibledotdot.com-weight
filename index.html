@@ -978,7 +978,8 @@
 <div class="page" id="page-journal">
 
   <div class="journal-form">
-    <div class="card-header">✍ New Journal Entry</div>
+    <div class="card-header">✍ Journal Entry <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px;">add as many as you like per day</span></div>
+    <div id="jEditBanner" style="display:none;font-size:12px;color:var(--accent2);margin-bottom:10px;"></div>
     <div class="journal-form-grid">
       <div>
         <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Date</label>
@@ -1030,7 +1031,7 @@
       <label><input type="checkbox" id="jQuickWin"> Quick win</label>
     </div>
     <div class="row mt-12">
-      <button class="btn bg-sunrise shadow-glow" style="color:var(--bg);" onclick="saveJournal()">Save Entry</button>
+      <button class="btn bg-sunrise shadow-glow" style="color:var(--bg);" id="jSaveBtn" onclick="saveJournal()">Save Entry</button>
       <button class="btn btn-ghost" onclick="clearJournalForm()">Clear</button>
       <span id="jMsg" style="font-size:12px; color:var(--accent);"></span>
     </div>
@@ -2221,9 +2222,13 @@ function renderChart() {
 // ═══════════════════════════════════════
 // ENTRY FORM
 // ═══════════════════════════════════════
+// Which field the user typed in last decides the source of truth, so 14st 3lb is stored as
+// exactly 90.265 kg (the KG box only shows it rounded to 0.1).
+let entrySource = 'kg';
 function syncEntryFromSt() {
   const stone = parseFloat(document.getElementById('entryStone').value) || 0;
   const lbs = parseFloat(document.getElementById('entryLbs').value) || 0;
+  entrySource = 'st';
   if (stone || lbs) {
     document.getElementById('entryKg').value = stLbsToKg(stone, lbs).toFixed(1);
   }
@@ -2231,38 +2236,38 @@ function syncEntryFromSt() {
 
 function syncEntryFromKg() {
   const kg = parseFloat(document.getElementById('entryKg').value);
+  entrySource = 'kg';
   if (!isNaN(kg)) {
-    const {stone, lbs} = kgToStLbs(kg);
+    const {stone, lbs} = kgToStLbs(kg, 1);
     document.getElementById('entryStone').value = stone;
     document.getElementById('entryLbs').value = lbs.toFixed(1);
   }
 }
 
+// Every save ADDS a new reading with its own id. Nothing is matched on date or time.
 function saveEntry() {
   const date = document.getElementById('entryDate').value;
-  const kg = parseFloat(document.getElementById('entryKg').value);
-  if (!date || isNaN(kg)) {
+  let kg = parseFloat(document.getElementById('entryKg').value);
+  if (entrySource === 'st') {
+    const st = parseFloat(document.getElementById('entryStone').value) || 0;
+    const lb = parseFloat(document.getElementById('entryLbs').value) || 0;
+    if (st || lb) kg = stLbsToKg(st, lb);
+  }
+  if (!isDateStr(date) || !Number.isFinite(kg) || kg <= 0) {
     document.getElementById('entryMsg').textContent = '⚠ Please enter a date and weight.';
     return;
   }
-  const {stone, lbs} = kgToStLbs(kg);
-  const frac = lbs - Math.floor(lbs);
   const now = new Date();
-  const timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
-  const rec = {date, time: timeStr, stone: Math.floor(stone), lbs: Math.floor(lbs), frac: +frac.toFixed(2), kg};
-  const existing = weightData.findIndex(d => d.date === date && d.time === timeStr);
-  if (existing >= 0) {
-    weightData[existing] = rec;
-    document.getElementById('entryMsg').textContent = '✓ Updated existing entry.';
-  } else {
-    const sameDay = weightData.filter(d => d.date === date).length;
-    weightData.push(rec);
-    document.getElementById('entryMsg').textContent = sameDay > 0 ? `✓ Additional entry saved for ${date}.` : '✓ Entry saved!';
-  }
+  const rec = {id: newId('w'), date, ...stoneFields(kg), kg: roundTo(kg, 3), createdAt: now.toISOString()};
+  if (date === localDateStr(now)) { rec.time = localTimeStr(now); rec.ts = now.getTime(); }
+  const sameDay = weightData.filter(d => d.date === date).length;
+  weightData.push(rec);
+  document.getElementById('entryMsg').textContent = sameDay > 0 ? `✓ Saved: reading ${sameDay + 1} for ${date}.` : '✓ Entry saved!';
   // Clear form
   document.getElementById('entryStone').value = '';
   document.getElementById('entryLbs').value = '';
   document.getElementById('entryKg').value = '';
+  entrySource = 'kg';
   setTimeout(() => document.getElementById('entryMsg').textContent = '', 3000);
   renderStats();
   renderTable();
@@ -2278,46 +2283,53 @@ document.getElementById('jDate').value = localDateStr();
 // ═══════════════════════════════════════
 // TABLE
 // ═══════════════════════════════════════
-let tableSortDir = -1;
+let tableSortDir = -1; // -1 = newest first
 
 function sortTable(field) {
   tableSortDir = -tableSortDir;
-  weightData.sort((a,b) => tableSortDir * a.date.localeCompare(b.date));
   renderTable();
 }
 
 function renderTable() {
   const search = document.getElementById('tableSearch').value.toLowerCase();
-  const sorted = [...weightData].sort((a,b) => b.date.localeCompare(a.date));
-  const filtered = sorted.filter(d => d.date.includes(search));
+  const asc = sortAsc(weightData);
+  // "Change" is always vs the chronologically previous reading, whatever the sort direction.
+  const prevKg = new Map(asc.map((d, i) => [d.id, i > 0 ? asc[i - 1].kg : null]));
+  const rows = (tableSortDir < 0 ? [...asc].reverse() : asc).filter(d => d.date.includes(search));
   const tbody = document.getElementById('tableBody');
-  tbody.innerHTML = filtered.map((d, i) => {
-    const prev = filtered[i+1];
-    const change = prev ? d.kg - prev.kg : null;
+  tbody.innerHTML = rows.map(d => {
+    const p = prevKg.get(d.id);
+    const change = p === null || p === undefined ? null : d.kg - p;
     const b = bmi(d.kg);
-    const {label, cls} = bmiStatus(b);
-    return `<tr id="row-${d.date}">
-      <td>${d.date}${d.time ? `<br><span style="font-size:10px;color:var(--muted)">${d.time}</span>` : ''}</td>
-      <td>${d.stone}st ${d.lbs + d.frac}lb</td>
-      <td>${(d.stone * 14 + d.lbs + d.frac).toFixed(1)} lb</td>
+    const {cls} = bmiStatus(b);
+    const id = esc(d.id);
+    return `<tr data-id="${id}">
+      <td>${esc(d.date)}${d.time ? `<br><span style="font-size:10px;color:var(--muted)">${esc(d.time)}</span>` : ''}</td>
+      <td>${fmtStone(d.kg)}</td>
+      <td>${(d.kg * LB_PER_KG).toFixed(1)} lb</td>
       <td>${d.kg.toFixed(1)}</td>
       <td><span class="pill ${cls}" style="font-size:10px;">${b.toFixed(1)}</span></td>
       <td style="color:${change === null ? 'var(--muted)' : change < 0 ? 'var(--accent)' : 'var(--accent3)'}">${change === null ? '—' : (change > 0 ? '+' : '') + change.toFixed(2) + ' kg'}</td>
-      <td id="del-${d.date}"><button class="delete-btn" onclick="confirmDelete('${d.date}')">✕</button></td>
+      <td class="del-cell"><button class="delete-btn" data-id="${id}" onclick="confirmDelete(this.dataset.id)" title="Delete this reading">✕</button></td>
     </tr>`;
   }).join('');
 }
 
-function confirmDelete(date) {
-  const cell = document.getElementById('del-' + date);
+function rowCell(id) {
+  return [...document.querySelectorAll('#tableBody tr')].find(tr => tr.dataset.id === id)?.querySelector('.del-cell');
+}
+
+function confirmDelete(id) {
+  const cell = rowCell(id);
   if (!cell) return;
   cell.innerHTML = `<span style="font-size:11px;color:var(--accent3);">Sure?</span>
-    <button class="delete-btn" style="color:var(--accent3);font-weight:700;" onclick="deleteEntry('${date}')">Yes</button>
+    <button class="delete-btn" style="color:var(--accent3);font-weight:700;" data-id="${esc(id)}" onclick="deleteEntry(this.dataset.id)">Yes</button>
     <button class="delete-btn" onclick="renderTable()">No</button>`;
 }
 
-function deleteEntry(date) {
-  weightData = weightData.filter(d => d.date !== date);
+// Deletes ONE reading (by id). Other readings on the same day are untouched.
+function deleteEntry(id) {
+  weightData = weightData.filter(d => d.id !== id);
   renderStats();
   renderTable();
   renderChart();
@@ -2325,11 +2337,12 @@ function deleteEntry(date) {
   persistAll();
 }
 
+function csvCell(v) { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
+
 function exportCSV() {
-  const sorted = [...weightData].sort((a,b) => b.date.localeCompare(a.date));
-  const rows = [['Date','Stone','Lbs','KG','BMI']];
-  sorted.forEach(d => rows.push([d.date, `${d.stone}st ${d.lbs}lb`, (d.stone*14+d.lbs+d.frac).toFixed(1), d.kg.toFixed(1), bmi(d.kg).toFixed(1)]));
-  const csv = rows.map(r => r.join(',')).join('\n');
+  const rows = [['Date','Time','Stone','Total lb','KG','BMI','Id']];
+  sortDesc(weightData).forEach(d => rows.push([d.date, d.time || '', fmtStone(d.kg), (d.kg * LB_PER_KG).toFixed(1), d.kg.toFixed(1), bmi(d.kg).toFixed(1), d.id]));
+  const csv = rows.map(r => r.map(csvCell).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
   a.download = 'weight_data.csv';
@@ -2374,32 +2387,59 @@ function setCheckin(checkin = {}) {
   document.getElementById('jQuickWin').checked = !!checkin.quickWin;
 }
 
+// Journal records: every save of a NEW entry appends a record with its own id; saving while
+// editing updates only that one record (matched by id, never by date).
+let editingJournalId = null;
+
 function saveJournal() {
   const date = document.getElementById('jDate').value;
   const comment = document.getElementById('jComment').value.trim();
   const weightVal = document.getElementById('jWeight').value;
   const notes = document.getElementById('jNotes').value.trim();
   const checkin = readCheckin();
-  if (!date || (!comment && !checkin)) {
+  if (!isDateStr(date) || (!comment && !checkin)) {
     document.getElementById('jMsg').textContent = '⚠ Date and one signal required.';
     return;
   }
-  const weight = weightVal ? parseFloat(weightVal) : null;
-  const d = new Date(date);
-  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const day = days[d.getDay()];
-  const existing = journalData.findIndex(j => j.date === date);
-  const rec = {date, day, comment, weight, notes};
-  if (checkin) rec.checkin = checkin;
-  if (pendingMealSnapshot) { rec.mealSnapshot = pendingMealSnapshot; pendingMealSnapshot = null; }
-  if (existing >= 0) journalData[existing] = rec;
-  else journalData.push(rec);
+  const w = weightVal ? parseFloat(weightVal) : NaN;
+  const weight = Number.isFinite(w) && w > 0 ? w : null;
+  const now = new Date();
+  const existing = editingJournalId ? journalData.find(j => j.id === editingJournalId) : null;
+  let rec;
+  if (existing) {
+    rec = {...existing, date, day: dayName(date), comment, weight, notes, updatedAt: now.toISOString()};
+    if (date !== existing.date) { delete rec.time; delete rec.ts; }
+    if (checkin) rec.checkin = checkin; else delete rec.checkin;
+    if (pendingMealSnapshot) rec.mealSnapshot = pendingMealSnapshot;
+    journalData = journalData.map(j => j.id === existing.id ? rec : j);
+  } else {
+    rec = {id: newId('j'), date, day: dayName(date), comment, weight, notes, createdAt: now.toISOString()};
+    if (date === localDateStr(now)) { rec.time = localTimeStr(now); rec.ts = now.getTime(); }
+    if (checkin) rec.checkin = checkin;
+    if (pendingMealSnapshot) rec.mealSnapshot = pendingMealSnapshot;
+    journalData.push(rec);
+  }
+  pendingMealSnapshot = null;
+  const sameDay = journalData.filter(j => j.date === date).length;
   clearJournalForm();
-  document.getElementById('jMsg').textContent = '✓ Entry saved!';
+  document.getElementById('jMsg').textContent = existing ? '✓ Entry updated.' : sameDay > 1 ? `✓ Saved: entry ${sameDay} for ${date}.` : '✓ Entry saved!';
   setTimeout(() => document.getElementById('jMsg').textContent = '', 3000);
   renderJournal();
+  renderOMAD();
   renderReset();
   persistAll();
+}
+
+function setJournalEditing(rec) {
+  editingJournalId = rec ? rec.id : null;
+  const banner = document.getElementById('jEditBanner');
+  const btn = document.getElementById('jSaveBtn');
+  if (banner) {
+    banner.style.display = rec ? '' : 'none';
+    banner.innerHTML = rec ? `Editing the entry from ${esc(rec.day || '')} ${esc(rec.date)}${rec.time ? ' ' + esc(rec.time) : ''}. Saving updates only this entry.
+      <button class="btn btn-ghost btn-sm" style="margin-left:8px;" onclick="clearJournalForm()">Cancel edit / new entry</button>` : '';
+  }
+  if (btn) btn.textContent = rec ? 'Update Entry' : 'Save Entry';
 }
 
 function clearJournalForm() {
@@ -2409,37 +2449,44 @@ function clearJournalForm() {
   document.getElementById('jNotes').value = '';
   setCheckin();
   pendingMealSnapshot = null;
+  setJournalEditing(null);
 }
 
-function editJournal(date) {
-  const j = journalData.find(d => d.date === date);
+function editJournal(id) {
+  const j = journalData.find(d => d.id === id);
   if (!j) return;
   document.getElementById('jDate').value = j.date;
   document.getElementById('jComment').value = j.comment || '';
   document.getElementById('jWeight').value = j.weight || '';
   document.getElementById('jNotes').value = j.notes || '';
   setCheckin(j.checkin);
+  pendingMealSnapshot = null;
+  setJournalEditing(j);
   document.querySelector('.journal-form').scrollIntoView({behavior:'smooth'});
 }
 
 function renderJournal() {
   const search = (document.getElementById('jSearch')?.value || '').toLowerCase();
-  const sorted = [...journalData].sort((a,b) => b.date.localeCompare(a.date));
+  const sorted = sortDesc(journalData);
+  const perDay = {};
+  journalData.forEach(j => { perDay[j.date] = (perDay[j.date] || 0) + 1; });
   const filtered = sorted.filter(j => {
     const checkText = j.checkin ? Object.values(j.checkin).join(' ').toLowerCase() : '';
     return !search || j.date.includes(search) || (j.comment || '').toLowerCase().includes(search) || (j.notes||'').toLowerCase().includes(search) || checkText.includes(search);
   });
-  document.getElementById('journalCount').textContent = `${filtered.length} entries`;
+  const days = new Set(filtered.map(j => j.date)).size;
+  document.getElementById('journalCount').textContent = `${filtered.length} entries · ${days} days`;
   document.getElementById('journalList').innerHTML = filtered.map(j => `
-    <div class="journal-entry ${j.weight ? 'has-weight' : ''}" onclick="editJournal('${j.date}')">
+    <div class="journal-entry ${j.weight ? 'has-weight' : ''} ${j.id === editingJournalId ? 'editing' : ''}" data-id="${esc(j.id)}" onclick="editJournal(this.dataset.id)">
       <div class="journal-entry-header">
         <div>
           <span class="journal-day">${esc(j.day)}</span>
-          <span class="journal-date"> · ${j.date}</span>
+          <span class="journal-date"> · ${esc(j.date)}${j.time ? ' · ' + esc(j.time) : ''}</span>
+          ${perDay[j.date] > 1 ? `<span class="tag" style="margin-left:6px;">${perDay[j.date]} entries this day</span>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          ${j.weight ? `<span class="journal-weight-badge">${j.weight} kg · ${fmtStone(j.weight)}</span>` : ''}
-          <button class="delete-btn" id="jdel-${j.date}" onclick="event.stopPropagation();deleteJournal('${j.date}')">✕</button>
+          ${j.weight ? `<span class="journal-weight-badge">${esc(j.weight)} kg · ${fmtStone(j.weight)}</span>` : ''}
+          <button class="delete-btn" data-id="${esc(j.id)}" onclick="event.stopPropagation();deleteJournal(this)" title="Delete this entry">✕</button>
         </div>
       </div>
       ${j.comment ? `<div class="journal-text" style="color:var(--muted);font-size:12px;">${esc(shortText(j.comment, 80))}</div>` : ''}
@@ -2448,8 +2495,8 @@ function renderJournal() {
         ${j.checkin.alcohol ? '<span class="tag">Alcohol</span>' : ''}
         ${j.checkin.exercise ? '<span class="tag">Exercise</span>' : ''}
         ${j.checkin.quickWin ? '<span class="tag">Quick win</span>' : ''}
-        ${j.checkin.foodNoise ? `<span class="tag">Noise ${j.checkin.foodNoise}/5</span>` : ''}
-        ${j.checkin.energy ? `<span class="tag">Energy ${j.checkin.energy}/5</span>` : ''}
+        ${j.checkin.foodNoise ? `<span class="tag">Noise ${esc(j.checkin.foodNoise)}/5</span>` : ''}
+        ${j.checkin.energy ? `<span class="tag">Energy ${esc(j.checkin.energy)}/5</span>` : ''}
         ${j.checkin.winTag ? `<span class="tag">${esc(j.checkin.winTag)}</span>` : ''}
       </div>` : ''}
       ${j.notes ? `<div class="journal-notes">${esc(j.notes)}</div>` : ''}
@@ -2457,12 +2504,15 @@ function renderJournal() {
   `).join('');
 }
 
-function deleteJournal(date) {
-  const btn = document.getElementById('jdel-' + date);
-  if (!btn) return;
+// Two-tap delete of ONE entry (by id). Other entries on the same date are untouched.
+function deleteJournal(btn) {
+  const id = btn && btn.dataset.id;
+  if (!id) return;
   if (btn.dataset.confirming) {
-    journalData = journalData.filter(j => j.date !== date);
+    journalData = journalData.filter(j => j.id !== id);
+    if (editingJournalId === id) clearJournalForm();
     renderJournal();
+    renderOMAD();
     renderReset();
     persistAll();
   } else {
@@ -2480,29 +2530,27 @@ const mealQtys = {};
 let omadCatFilter = null;
 let omadMealsExpanded = false;
 let pendingMealSnapshot = null;
-const recentMealSnapshotsByDate = {};
+const recentMealSnapshotsById = {};
 
 function renderOMAD() {
   const cats = [...new Set(omadFoods.map(f => f.cat))];
 
   // Recent meals panel
-  const mealsWithSnap = journalData
-    .filter(j => j.mealSnapshot && j.mealSnapshot.length > 0)
-    .sort((a, b) => b.date.localeCompare(a.date));
-  Object.keys(recentMealSnapshotsByDate).forEach(k => delete recentMealSnapshotsByDate[k]);
-  mealsWithSnap.forEach(j => { recentMealSnapshotsByDate[j.date] = j.mealSnapshot; });
+  const mealsWithSnap = sortDesc(journalData.filter(j => j.mealSnapshot && j.mealSnapshot.length > 0));
+  Object.keys(recentMealSnapshotsById).forEach(k => delete recentMealSnapshotsById[k]);
+  mealsWithSnap.forEach(j => { recentMealSnapshotsById[j.id] = j.mealSnapshot; });
 
   let recentMealsHtml = '';
   if (mealsWithSnap.length > 0) {
     const shown = omadMealsExpanded ? mealsWithSnap : mealsWithSnap.slice(0, 5);
     const chips = shown.map(j => {
-      const calMatch = j.comment.match(/\((\d+) cal\)/);
+      const calMatch = (j.comment || '').match(/\((\d+) cal\)/);
       const cal = calMatch ? calMatch[1] : '?';
       const preview = j.mealSnapshot.map(s => `${s.qty}× ${s.name}`).slice(0, 3).join(', ') + (j.mealSnapshot.length > 3 ? '…' : '');
       return `
-        <button class="meal-chip" data-date="${j.date}" onclick="loadMealSnapshotByDate(this.dataset.date)">
+        <button class="meal-chip" data-id="${esc(j.id)}" onclick="loadMealSnapshotById(this.dataset.id)">
           <div>
-            <span class="meal-chip-date">${esc(j.day)} ${j.date}</span>
+            <span class="meal-chip-date">${esc(j.day)} ${esc(j.date)}${j.time ? ' ' + esc(j.time) : ''}</span>
             <div class="meal-chip-preview">${esc(preview)}</div>
           </div>
           <span class="meal-chip-cal">${cal} cal</span>
@@ -2592,14 +2640,24 @@ function toggleMealsExpanded() {
   renderOMAD();
 }
 
-function loadMealSnapshotByDate(date) {
-  const snap = recentMealSnapshotsByDate[date];
+function loadMealSnapshotById(id) {
+  const snap = recentMealSnapshotsById[id];
   if (snap) loadMealSnapshot(snap);
+}
+
+function foodKeyFor(food) {
+  const fi = omadFoods.filter(f => f.cat === food.cat).indexOf(food);
+  return `${food.cat}-${fi}`;
 }
 
 function loadMealSnapshot(snapshot) {
   Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
-  snapshot.forEach(({key, qty}) => { if (qty > 0) mealQtys[key] = qty; });
+  // Resolve by food name first: keys are category-position based and shift when foods are edited.
+  snapshot.forEach(({key, name, qty}) => {
+    if (!(qty > 0)) return;
+    const food = name ? omadFoods.find(f => f.name === name) : null;
+    mealQtys[food ? foodKeyFor(food) : key] = qty;
+  });
   renderOMAD();
   updateTotals();
 }
@@ -2664,6 +2722,8 @@ function logMealToJournal() {
   if (!items.length) { alert('No items in meal.'); return; }
   const totCals = parseInt(document.getElementById('totCals').textContent);
   const summary = `OMAD Meal (${totCals} cal):\n` + items.join(', ');
+  pendingMealSnapshot = snapshot;
+  clearJournalForm(); // a logged meal is always a NEW journal entry
   pendingMealSnapshot = snapshot;
   document.getElementById('jDate').value = localDateStr();
   document.getElementById('jComment').value = summary;
@@ -2801,8 +2861,8 @@ function importJSON(event) {
   reader.onload = e => {
     try {
       const data = JSON.parse(e.target.result);
-      // Validate it looks right
-      if (!data.weightData || !data.journalData) {
+      // Validate it looks right (arrays, or Firebase-style keyed objects)
+      if (!data || typeof data.weightData !== 'object' || typeof data.journalData !== 'object' || !data.weightData || !data.journalData) {
         showImportMsg('⚠ Invalid backup file — missing data sections.', true);
         return;
       }
@@ -2819,19 +2879,22 @@ function importJSON(event) {
 let pendingImport = null;
 
 function showImportChoice(data) {
+  data.weightData = normalizeWeightEntries(data.weightData);
+  data.journalData = normalizeJournalEntries(data.journalData);
   pendingImport = data;
-  const wCount = data.weightData ? data.weightData.length : 0;
-  const jCount = data.journalData ? data.journalData.length : 0;
+  const wCount = data.weightData.length;
+  const jCount = data.journalData.length;
   const dateStr = data.exported ? data.exported.split('T')[0] : 'unknown date';
   document.getElementById('importModalMsg').innerHTML =
     `Found <b>${wCount}</b> weight records and <b>${jCount}</b> journal entries from <b>${dateStr}</b>.<br><br>
     <b>Replace All</b> — overwrites your current data.<br>
-    <b>Merge</b> — adds records not already present (safe, no duplicates).`;
+    <b>Merge</b> — adds every record that isn't already here (matched by id and content). Nothing existing is overwritten; several entries on one day are all kept.`;
   const modal = document.getElementById('importModal');
   modal.style.display = 'flex';
 }
 
 function applyImport(mode) {
+  if (mode === 'replace' && !confirm('Replace ALL current weight and journal data with the backup?')) return;
   const data = pendingImport;
   if (!data) return;
   if (mode === 'replace') {
@@ -2841,11 +2904,12 @@ function applyImport(mode) {
     Object.keys(mealQtys).forEach(k => delete mealQtys[k]);
     if (data.mealQtys) Object.assign(mealQtys, data.mealQtys);
   } else {
-    // Merge: add records not already present (by date)
-    const wDates = new Set(weightData.map(d => d.date));
-    data.weightData.forEach(d => { if (!wDates.has(d.date)) weightData.push(d); });
-    const jDates = new Set(journalData.map(d => d.date));
-    data.journalData.forEach(d => { if (!jDates.has(d.date)) journalData.push(d); });
+    // Merge: lossless, by id + content (never by date)
+    const wm = mergeEntries(weightData, data.weightData, 'weight');
+    const jm = mergeEntries(journalData, data.journalData, 'journal');
+    weightData = wm.list;
+    journalData = jm.list;
+    mode = `merge: +${wm.added} weight, +${jm.added} journal`;
     if (data.omadFoods) {
       const existing = new Set(omadFoods.map(f => f.name));
       data.omadFoods.forEach(f => { if (!existing.has(f.name)) omadFoods.push(f); });
@@ -2897,7 +2961,7 @@ function showSaveError(msg) {
 
 function currentBackup() {
   return {
-    version: 3,
+    version: 4, // v4: every weight/journal record has a unique id; several per day allowed
     exported: new Date().toISOString(),
     savedBy: 'browser-localStorage',
     phases: PHASES,
@@ -2913,9 +2977,10 @@ function currentBackup() {
 }
 
 function applyLoadedData(data) {
-  if (!data || !Array.isArray(data.weightData) || !Array.isArray(data.journalData)) return false;
-  weightData = data.weightData;
-  journalData = data.journalData;
+  if (!data || !data.weightData || !data.journalData || typeof data.weightData !== 'object' || typeof data.journalData !== 'object') return false;
+  // Migration: v3 data (date-keyed journal, no ids) is converted losslessly here.
+  weightData = normalizeWeightEntries(data.weightData);
+  journalData = normalizeJournalEntries(data.journalData);
   if (Array.isArray(data.omadFoods)) {
     omadFoods.length = 0;
     data.omadFoods.forEach(f => omadFoods.push(f));
@@ -3027,11 +3092,13 @@ async function loadFromFirebase() {
     const snap = await firebaseDB.ref(`/health/${fbUser}`).once('value');
     const data = snap.val();
     if (!data) return false;
+    // Old layout: journal keyed by date, weights by date or date_HHMM. New layout: keyed by id.
+    // Both load the same way; ids are assigned deterministically to old records.
     if (data.weightData && typeof data.weightData === 'object') {
-      weightData = Object.values(data.weightData).filter(d => d && d.date);
+      weightData = normalizeWeightEntries(data.weightData);
     }
     if (data.journalData && typeof data.journalData === 'object') {
-      journalData = Object.values(data.journalData).filter(j => j && j.date);
+      journalData = normalizeJournalEntries(data.journalData);
     }
     if (data.omadFoods && typeof data.omadFoods === 'object') {
       const foods = Object.values(data.omadFoods).filter(Boolean);
@@ -3076,13 +3143,9 @@ function syncToFirebase() {
   if (!firebaseDB || !fbUser || fbSyncing) return;
   fbSyncing = true;
   // Arrays must be keyed objects in Firebase (no arrays allowed)
-  const weightObj = {};
-  weightData.forEach(d => {
-    const key = d.time ? `${d.date}_${d.time.replace(':','')}` : d.date;
-    weightObj[key] = d;
-  });
-  const journalObj = {};
-  journalData.forEach(j => { journalObj[j.date] = j; });
+  // Keyed by record id (was: journal by date, so same-day entries collapsed to one on sync).
+  const weightObj = toKeyedObject(weightData);
+  const journalObj = toKeyedObject(journalData);
   const omadObj = {};
   omadFoods.forEach((f, i) => { omadObj[`f${String(i).padStart(4,'0')}`] = f; });
   // Preferences — goals read from DOM
