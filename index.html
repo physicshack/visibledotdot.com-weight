@@ -880,13 +880,13 @@
         <div class="goal-input">
           <label>Start Weight <span style="color:var(--muted);font-size:10px;">(for progress %)</span></label>
           <div style="display:flex;gap:6px;align-items:center;">
-            <input type="number" id="goalStart" step="0.1" placeholder="kg" oninput="updateGoals()" style="flex:1;">
+            <input type="number" id="goalStart" step="0.1" placeholder="kg" oninput="updateGoals(); scheduleGoalPersist()" style="flex:1;">
             <button class="btn btn-ghost btn-sm" onclick="resetGoalStart()" title="Reset to latest weight">↺ Now</button>
           </div>
         </div>
         <div class="goal-input">
           <label>Target Weight</label>
-          <input type="number" id="goalTarget" step="0.1" placeholder="kg" oninput="updateGoals()">
+          <input type="number" id="goalTarget" step="0.1" placeholder="kg" oninput="updateGoals(); scheduleGoalPersist()">
         </div>
       </div>
       <div id="goalOutput" class="mt-12" style="font-size:13px; color:var(--muted);"></div>
@@ -1946,13 +1946,13 @@ function resetGoalStart() {
   if (!latest) return;
   document.getElementById('goalStart').value = latest.kg.toFixed(1);
   updateGoals();
+  scheduleGoalPersist();
 }
 
 function updateGoals() {
   // The projection is computed from the chart's visible slice, so the chart renders the goal card too.
   renderChart();
   renderReset();
-  if (typeof scheduleGoalPersist === 'function') scheduleGoalPersist();
 }
 
 function renderGoalOutput(m) {

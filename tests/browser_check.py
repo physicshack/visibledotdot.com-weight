@@ -33,7 +33,7 @@ with sync_playwright() as p:
     pg = ctx.new_page(); errs = []
     pg.on('pageerror', lambda e: errs.append(str(e)[:200])); pg.on('dialog', lambda d: d.accept())
     pg.clock.install(time=NOW)
-    pg.goto(URL); pg.wait_for_timeout(500)
+    pg.goto(URL); pg.wait_for_timeout(500); pg.clock.run_for(3000)  # let any start-up timers fire before seeding
     store = lambda: json.loads(pg.evaluate("()=>localStorage.getItem('weightTrackerData')"))
 
     # 1. migration of v3 localStorage
