@@ -30,15 +30,16 @@ JS, Chart.js from a CDN and optional Firebase Realtime Database sync. There is n
 
 ### Pages inside `index.html`
 
-The app is one HTML page with four tabs (`showPage(id)` toggles `#page-<id>`) and some modals.
+The app is one HTML page with three tabs (`showPage(id)` toggles `#page-<id>`; `showPage('reset')` is kept as an
+alias for Tracker) and some modals. On phones the tabs are a bottom tab bar.
 
 | Tab / modal | Element | Purpose |
 |---|---|---|
-| **Reset** | `#page-reset` | Dashboard: reset day (days since `PHASES[0].start`, counted to *today*), current phase, total lost, target gap, phase strip, latest journal signal and win, next milestones (stone line, healthy BMI, target, next 5 kg), state check (OMAD-kept and alcohol *days* plus food-noise and energy averages over the last 14 check-in days), and quick wins. |
-| **📈 Tracker** | `#page-tracker` | Stats cards, BMI gauge, goals (start, target, projected date, progress %), the *Weight Over Time* chart with start/end range sliders, the add-reading form (st/lb or kg), the all-records table (per-reading delete) and CSV export. |
+| **📈 Tracker** (landing tab) | `#page-tracker` | The *Log weight* form (st/lb or kg) first, then stats cards; **Reset progress** (reset day = days since `PHASES[0].start`, counted to *today*; current phase; phase strip); **Today** (daily check-in button, latest journal signal and win); BMI gauge; goals (start, target, projected date, progress %); the *Weight over time* chart with start/end range sliders; **State check** (OMAD-kept and alcohol *days* plus food-noise and energy averages over the last 14 check-in days); **Next milestones** (stone line, next 5 kg); **Quick wins**; the all-records table (per-reading delete) and CSV export. The former Reset tab's total lost, target gap, healthy-BMI and target milestones are not repeated because the stats, BMI and Goals cards show them. |
 | **📓 Journal** | `#page-journal` | Journal form (date, optional weight, notes, free text, 1–5 ratings for hunger, food noise, energy, focus and sleep, plus tags) and a searchable list. **You can add as many entries per day as you like.** Tap an entry to edit *that* entry; ✕ (tap twice) deletes only that entry. |
-| **🍽 OMAD Tool** | `#page-omad` | Meal builder from the food database (± 0.5 steps, category filter, recent meals), calorie and macro totals against the calorie target, and *Log to Journal*, which always creates a new journal entry carrying a meal snapshot. *Edit Foods* opens the food editor modal. |
-| Cloud Sync modal | `#userModal` | "Log in" = type a username. Data loads from or syncs to `/health/{username}`. Includes a danger zone (clear local data, delete account). |
+| **🍽 OMAD** | `#page-omad` | Meal builder from the food database (± 0.5 steps, category filter, recent meals), calorie and macro totals against the calorie target, and *Log to Journal*, which always creates a new journal entry carrying a meal snapshot. *Edit Foods* opens the food editor modal. |
+| Account (👤) modal | `#userModal` | Cloud sync ("log in" = type a username; data loads from or syncs to `/health/{username}`), **Backup** (Export / Import JSON), and a danger zone when signed in (clear local data, delete account). |
+| Theme toggle (☀/☾) | `#themeToggle` | Light / dark mode. Defaults to the system `prefers-color-scheme`; the choice is saved in its own key `localStorage['weightTheme']` (the data object is untouched). |
 | Import modal | `#importModal` | Replace all, or merge (lossless) from a JSON backup. |
 | Food editor modal | `#foodEditorModal` | Add, edit and delete foods. |
 

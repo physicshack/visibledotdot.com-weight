@@ -27,7 +27,7 @@ def check(name, cond, detail=''):
 
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path=CHROME, args=['--no-sandbox'])
-    ctx = b.new_context(viewport={'width': 1100, 'height': 1300}, has_touch=True, accept_downloads=True)
+    ctx = b.new_context(viewport={'width': 1100, 'height': 1300}, has_touch=True, accept_downloads=True, color_scheme='dark')
     for pat in ['**/*firebasedatabase.app/**', '**/*firebaseio.com/**', '**/firebasejs/**']:
         ctx.route(pat, lambda r: r.abort())
     pg = ctx.new_page(); errs = []
@@ -73,7 +73,7 @@ with sync_playwright() as p:
     btn.click(); btn.click(); pg.wait_for_timeout(200)
     c18 = sorted(j['comment'] for j in store()['journalData'] if j['date'] == '2026-10-18')
     check('journal: delete removed only that entry', c18 == ['Evening reflection', 'Lunch thought (edited)', 'Morning check-in'], c18)
-    pg.click("nav button:has-text('Reset')"); pg.wait_for_timeout(300)
+    pg.click("nav button:has-text('Tracker')"); pg.wait_for_timeout(300)  # Reset content now lives on Tracker
     check('reset: OMAD kept counted per day', '2/2' in pg.inner_text('#stateCheck'), pg.inner_text('#stateCheck'))
 
     # 3. OMAD: log to journal creates a NEW entry even while another was being edited; food delete works
@@ -125,8 +125,13 @@ with sync_playwright() as p:
     if OUT: pg.locator('#weightChart').screenshot(path=f'{OUT}/after-chart-multi-kg.png')
 
     # 6. export → merge into itself adds nothing; legacy backup merge adds only what is missing
-    with pg.expect_download() as dl: pg.click("header button:has-text('Export')")
+    pg.click('#userBtn'); pg.wait_for_timeout(200)  # Export/Import live in the account (👤) menu
+    check('menu: export/import are in the account menu, not the header',
+          pg.locator("#userModal button:has-text('Export')").is_visible() and pg.locator("#userModal button:has-text('Import')").is_visible()
+          and pg.locator("header button:has-text('Export')").count() == 0 and pg.locator("header button:has-text('Import')").count() == 0)
+    with pg.expect_download() as dl: pg.click("#userModal button:has-text('Export')")
     path = dl.value.path(); exported = json.load(open(path))
+    pg.click("#userModal button[aria-label='Close']"); pg.wait_for_timeout(150)
     before = (len(store()['weightData']), len(store()['journalData']))
     pg.set_input_files('#importFile', path); pg.wait_for_timeout(300); pg.click("#importModal button:has-text('Merge')"); pg.wait_for_timeout(300)
     check('import: merging own export adds nothing', (len(store()['weightData']), len(store()['journalData'])) == before)
@@ -145,7 +150,57 @@ with sync_playwright() as p:
     check('firebase(mock): legacy date-keyed journal loads', res['ok'] and res['jCount'] == 3, res)
     check('firebase(mock): write keyed by id, both 17 Oct entries kept', len(res['keys']) == 3 and all(k.startswith('j-') for k in res['keys']), res['keys'])
     check('no page errors', not errs, errs)
+
+    # 8. merged Tracker tab (Reset content moved in, no duplicates) + default landing tab
+    pg.evaluate("()=>localStorage.removeItem('weightTrackerData')"); pg.reload(); pg.wait_for_timeout(1000)
+    nav = pg.evaluate("()=>[...document.querySelectorAll('nav button')].map(b=>b.textContent.trim())")
+    check('merged: nav is Tracker/Journal/OMAD (no Reset tab)', nav == ['📈Tracker', '📓Journal', '🍽OMAD'], nav)
+    check('merged: lands on Tracker', pg.evaluate("()=>document.querySelector('.page.active').id") == 'page-tracker'
+          and pg.inner_text('nav button.active').strip().endswith('Tracker'))
+    check('merged: no #page-reset; reset cards are on Tracker', pg.evaluate("""()=>!document.getElementById('page-reset') &&
+          ['resetHero','phaseStrip','latestSignal','milestoneGrid','stateCheck','quickWins','todayPrompt'].every(id=>document.getElementById(id)?.closest('#page-tracker'))"""))
+    txt = pg.inner_text('#page-tracker')
+    check('merged: reset day + phase shown', 'Reset day' in txt.replace('RESET DAY', 'Reset day') or 'RESET DAY' in txt, txt[:200])
+    labels = pg.evaluate("()=>[...document.querySelectorAll('#page-tracker .stat-label')].map(e=>e.childNodes[0].textContent.trim().toLowerCase())")
+    check('merged: no duplicate stat labels on Tracker', len(labels) == len(set(labels)), labels)
+    check('merged: showPage("reset") still works (alias)', pg.evaluate("()=>{showPage('journal');showPage('reset');return document.querySelector('.page.active').id}") == 'page-tracker')
+
+    # 9. theme: toggle, persistence (own key, data untouched), chart colours, WCAG AA text contrast in both themes
+    CONTRAST = r"""()=>{const lum=c=>{const m=c.match(/[\d.]+/g).map(Number);const [r,g,b]=m.slice(0,3).map(v=>{v/=255;return v<=0.04045?v/12.92:Math.pow((v+0.055)/1.055,2.4)});return 0.2126*r+0.7152*g+0.0722*b};
+      const bgOf=e=>{for(let n=e;n;n=n.parentElement){const s=getComputedStyle(n);if(s.backgroundImage!=='none')return null;const m=s.backgroundColor.match(/[\d.]+/g);if(m&&(m.length<4||+m[3]>0.9))return s.backgroundColor;}return getComputedStyle(document.body).backgroundColor};
+      const bad=[];document.querySelectorAll('.page.active *, header *').forEach(e=>{if(!e.offsetParent&&getComputedStyle(e).position!=='fixed')return;
+        if(![...e.childNodes].some(n=>n.nodeType===3&&n.textContent.trim()))return;const s=getComputedStyle(e);if(s.visibility==='hidden'||+s.opacity===0)return;
+        let op=1;for(let n=e;n;n=n.parentElement)op*=+getComputedStyle(n).opacity;if(op<0.95)return;
+        const bg=bgOf(e);if(!bg||s.color.includes('rgba(0, 0, 0, 0)'))return;const a=lum(s.color),b=lum(bg);const r=(Math.max(a,b)+0.05)/(Math.min(a,b)+0.05);
+        const large=parseFloat(s.fontSize)>=24||(parseFloat(s.fontSize)>=18.66&&+s.fontWeight>=700);if(r<(large?3:4.5))bad.push(e.tagName+'.'+e.className+' "'+e.textContent.trim().slice(0,20)+'" '+r.toFixed(2));});return bad;}"""
+    seed = json.dumps(LEGACY_V3)
+    for page in ['tracker', 'journal', 'omad']:
+        pg.evaluate(f"()=>showPage('{page}')"); pg.wait_for_timeout(150)
+        bad = pg.evaluate(CONTRAST); check(f'contrast AA dark: {page}', not bad, bad[:6])
+    start = pg.evaluate("()=>document.documentElement.dataset.theme")
+    data_before = pg.evaluate("()=>localStorage.getItem('weightTrackerData')")
+    tick_dark = pg.evaluate("()=>Chart.getChart('weightChart')?.options.scales.y.ticks.color")
+    pg.click('#themeToggle'); pg.wait_for_timeout(200)
+    check('theme: toggle switches to light and saves own key',  pg.evaluate("()=>[document.documentElement.dataset.theme, localStorage.getItem('weightTheme')]") == ['light', 'light'])
+    check('theme: weightTrackerData untouched by toggle', pg.evaluate("()=>localStorage.getItem('weightTrackerData')") == data_before)
+    pg.evaluate("()=>showPage('tracker')"); pg.wait_for_timeout(200)
+    tick_light = pg.evaluate("()=>Chart.getChart('weightChart')?.options.scales.y.ticks.color")
+    check('theme: chart axes recoloured for light', tick_dark and tick_light and tick_dark != tick_light, (tick_dark, tick_light))
+    for page in ['tracker', 'journal', 'omad']:
+        pg.evaluate(f"()=>showPage('{page}')"); pg.wait_for_timeout(150)
+        bad = pg.evaluate(CONTRAST); check(f'contrast AA light: {page}', not bad, bad[:6])
+    pg.reload(); pg.wait_for_timeout(800)
+    check('theme: choice survives reload', pg.evaluate("()=>document.documentElement.dataset.theme") == 'light' and pg.get_attribute('#themeToggle', 'aria-label') == 'Switch to dark mode')
+    pg.click('#themeToggle'); pg.wait_for_timeout(100)
+    check('theme: toggles back to dark', pg.evaluate("()=>[document.documentElement.dataset.theme, localStorage.getItem('weightTheme')]") == ['dark', 'dark'])
     b.close()
+    # system default: no saved choice + OS light -> light; OS dark -> dark
+    for scheme in ['light', 'dark']:
+        b2 = p.chromium.launch(executable_path=CHROME, args=['--no-sandbox']); c2 = b2.new_context(color_scheme=scheme)
+        for pat in ['**/*firebasedatabase.app/**', '**/*firebaseio.com/**', '**/firebasejs/**']: c2.route(pat, lambda r: r.abort())
+        p2 = c2.new_page(); p2.goto(URL); p2.wait_for_timeout(500)
+        check(f'theme: defaults to system ({scheme})', p2.evaluate("()=>document.documentElement.dataset.theme") == scheme)
+        b2.close()
 print(json.dumps(R, indent=1))
 print(f"{len(R) - len(FAILS)}/{len(R)} browser checks passed")
 sys.exit(1 if FAILS else 0)

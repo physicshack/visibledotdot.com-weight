@@ -3,6 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#1a1d27">
+<script>
+  // Theme: saved choice (localStorage 'weightTheme') else the system prefers-color-scheme. Presentation only.
+  (function () {
+    var t = null; try { t = localStorage.getItem('weightTheme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = (window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
 <title>visible.. weight</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><defs><radialGradient id='s' cx='0.5' cy='0.45' r='0.55'><stop offset='0%25' stop-color='%23fde68a'/><stop offset='60%25' stop-color='%23f59e0b'/><stop offset='100%25' stop-color='%23c2410c'/></radialGradient><clipPath id='c'><path d='M0 0 L40 0 L40 28 Q20 18 0 28 Z'/></clipPath></defs><rect width='40' height='40' rx='8' fill='%230f1117'/><circle cx='20' cy='20' r='7' fill='url(%23s)' clip-path='url(%23c)'/><path d='M 4 28 Q 20 18 36 28' fill='none' stroke='%233dd68c' stroke-width='2.2' stroke-linecap='round'/></svg>">
 <style>
@@ -12,19 +22,27 @@
     --bg: #0f1117;
     --surface: #1a1d27;
     --surface2: #22263a;
-    --border: #2e3248;
+    --border: #343954;
     --accent: #6ee7b7;
     --accent2: #f59e0b;
     --accent3: #f87171;
     --text: #e8eaf0;
-    --muted: #7a7f9a;
+    --muted: #9ba1b9;       /* was #7a7f9a (3.8–4.3:1); now ≥5.7:1 on every surface (WCAG AA) */
+    --border-strong: #565c7e; /* inputs: ≥3:1 non-text contrast */
+    --on-accent: #06140e;
+    /* spacing scale (4px base) */
+    --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
+    /* type scale */
+    --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 18px; --fs-xl: 24px; --fs-2xl: 32px;
+    --radius: 14px; --radius-sm: 10px;
+    --tap: 44px;
     --card-bg: #161929;
     --goal: #818cf8;
 
     /* visible.. brand palette — hex values as baseline, overridden by oklch below */
     --fg:            #e8eaf0;
     --surface-2:     #22263a;
-    --muted-fg:      #7a7f9a;
+    --muted-fg:      #9ba1b9;
     --sunrise-core:  #fde68a;
     --sunrise-warm:  #f59e0b;
     --sunrise-ember: #c2410c;
@@ -41,7 +59,7 @@
     :root {
       --fg:            oklch(0.93 0.012 248);
       --surface-2:     oklch(0.27 0.026 264);
-      --muted-fg:      oklch(0.6 0.024 252);
+      --muted-fg:      oklch(0.72 0.024 252);
       --sunrise-core:  oklch(0.97 0.12 92);
       --sunrise-warm:  oklch(0.85 0.17 65);
       --sunrise-ember: oklch(0.72 0.18 45);
@@ -694,6 +712,271 @@
   /* Modal danger zone */
   .danger-zone { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
   .danger-zone-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     UI CLEAN-UP LAYER (ui-cleanup branch). Presentation only: tokens for
+     spacing / type / radius, one card style, one primary-button style,
+     44px touch targets on phones, bottom tab bar on phones, empty states.
+     ═══════════════════════════════════════════════════════════════════ */
+  body { font-size: var(--fs-md); line-height: 1.45; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .nowrap { white-space: nowrap; }
+  .mb-12 { margin-bottom: var(--sp-3); }
+
+  /* header + nav */
+  header { gap: var(--sp-5); padding: var(--sp-2) var(--sp-5); min-height: 64px; }
+  .visible-logo svg { width: 132px; height: auto; display: block; }
+  nav { gap: var(--sp-1); }
+  nav button { min-height: 40px; padding: 0 var(--sp-4); font-size: var(--fs-sm); display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-sm); }
+  .nav-ico { font-size: 14px; line-height: 1; }
+  .header-tools { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); }
+  .header-status { font-size: var(--fs-xs); color: var(--accent); display: inline-flex; gap: 6px; white-space: nowrap; }
+  .unit-toggle { border-color: var(--border-strong); }
+  .unit-toggle button { min-height: 32px; padding: 0 var(--sp-3); }
+  .unit-toggle button.active { color: var(--on-accent); }
+
+  /* layout rhythm */
+  .page { padding: var(--sp-5); max-width: 1200px; }
+  .grid-2 { gap: var(--sp-4); }
+  .stats-grid { gap: var(--sp-3); margin-bottom: var(--sp-4); }
+  .reset-hero { gap: var(--sp-4); margin-bottom: var(--sp-4); }
+
+  /* one card style */
+  .card, .journal-form { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--sp-5); }
+  .card-primary, .journal-form { border-color: rgba(110,231,183,0.45); }
+  .card-header { font-size: var(--fs-lg); color: var(--text); margin-bottom: var(--sp-4); flex-wrap: wrap; }
+  .card-sub, .label-note { font-family: 'DM Sans', sans-serif; font-size: var(--fs-xs); font-weight: 400; color: var(--muted); text-transform: none; letter-spacing: 0; }
+  .stat-card { border-radius: var(--radius-sm); padding: var(--sp-3) var(--sp-4); }
+  .stat-label { font-size: var(--fs-xs); letter-spacing: 0.06em; }
+  .stat-value { font-size: var(--fs-xl); }
+  .stat-sub { font-size: var(--fs-xs); }
+  .big-number { font-family: 'DM Serif Display', serif; font-size: var(--fs-2xl); line-height: 1.1; }
+  .phase-step { border-radius: var(--radius-sm); }
+  .phase-name { font-size: var(--fs-sm); }
+  .phase-meta, .bmi-labels, .range-group label, .checkin-grid label, .category-header, .food-meta,
+  .total-label, .recent-meals-header, .meal-chip-preview, .meal-chip-date, .tag, .danger-zone-title,
+  .journal-notes, .journal-date, th, .pill { font-size: var(--fs-xs); }
+  .goal-input label { font-size: var(--fs-xs); text-transform: none; letter-spacing: 0; font-weight: 500; }
+
+  /* text helpers */
+  .field-label { display: block; font-size: var(--fs-xs); font-weight: 500; color: var(--muted); margin-bottom: var(--sp-1); }
+  .section-label { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin: var(--sp-4) 0 var(--sp-2); }
+  .section-label .label-note { margin-left: 6px; }
+  .hint { font-size: var(--fs-sm); color: var(--muted); line-height: 1.5; }
+  .form-msg { font-size: var(--fs-sm); color: var(--accent); min-height: 20px; }
+  .edit-banner { font-size: var(--fs-sm); color: var(--accent2); background: rgba(245,158,11,0.10); border: 1px solid rgba(245,158,11,0.35); border-radius: var(--radius-sm); padding: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-3); }
+
+  /* inputs */
+  input[type=text], input[type=date], input[type=number], input[type=search], textarea, select {
+    background: var(--surface2); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 9px 12px; min-height: 40px; width: 100%; outline: none;
+  }
+  input[type=search] { -webkit-appearance: none; appearance: none; }
+  input::placeholder, textarea::placeholder { color: #8f95ad; opacity: 1; }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(110,231,183,0.18); }
+  input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+  input.search-input { width: 220px; }
+
+  /* buttons: one primary (mint), one secondary (outline), one destructive (red outline) */
+  .btn { min-height: 40px; padding: 0 var(--sp-4); border-radius: var(--radius-sm); font-size: var(--fs-sm); line-height: 1.2;
+         display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--on-accent); white-space: nowrap; }
+  .btn-sm { min-height: 36px; padding: 0 var(--sp-3); font-size: var(--fs-sm); }
+  .btn-lg { min-height: 52px; padding: 0 var(--sp-5); font-size: var(--fs-md); }
+  .btn-ghost { background: transparent; border: 1px solid var(--border-strong); color: var(--text); }
+  .btn-ghost:hover { border-color: var(--accent); opacity: 1; }
+  .btn-primary-save { background: var(--accent); color: var(--on-accent); min-width: 120px; }
+  .btn-danger-ghost { background: transparent; color: #fca5a5; border: 1px solid rgba(248,113,113,0.6); }
+  .btn-danger-ghost:hover { background: rgba(248,113,113,0.12); opacity: 1; }
+  .btn:focus-visible, nav button:focus-visible, .unit-toggle button:focus-visible, .delete-btn:focus-visible,
+  .filter-pill:focus-visible, .qty-stepper button:focus-visible, .meal-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .delete-btn { min-width: 36px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; border-radius: 8px; }
+  .quick-actions { display: flex; gap: var(--sp-3); margin-bottom: var(--sp-4); flex-wrap: wrap; }
+  .quick-actions .btn { flex: 0 1 240px; }
+
+  /* tracker */
+  .entry-row { grid-template-columns: 170px 1fr 1fr 1fr 140px; gap: var(--sp-3); margin-bottom: var(--sp-2); }
+  .bmi-bar { height: 14px; border-radius: 7px; }
+  .range-controls { gap: var(--sp-4); }
+  .range-group input[type=range] { height: 32px; }
+  .range-dates { font-size: var(--fs-xs); color: var(--muted); min-width: 200px; text-align: right; }
+  .data-table-wrapper { overflow-x: auto; border-radius: var(--radius-sm); }
+  td { padding: 10px 12px; font-size: 14px; }
+  th.num { text-align: right; }
+  .cell-sub { font-size: var(--fs-xs); color: var(--muted); }
+  .empty-row { text-align: center; color: var(--muted); padding: var(--sp-5) var(--sp-3); }
+  .pill:empty { display: none; }
+
+  /* empty states */
+  .empty-state { color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; padding: var(--sp-4); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: transparent; }
+  .empty-title { color: var(--text); font-weight: 600; font-size: var(--fs-md); margin-bottom: var(--sp-1); }
+  .chart-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: var(--sp-5); }
+  .empty-hint { color: var(--muted) !important; font-style: italic; }
+
+  /* journal */
+  .journal-form { margin-bottom: var(--sp-4); }
+  .journal-form-grid { grid-template-columns: 180px 180px; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+  textarea { min-height: 96px; line-height: 1.5; }
+  .checkin-grid { gap: var(--sp-3); margin: 0 0 var(--sp-3); }
+  .toggle-row { gap: var(--sp-2); }
+  .toggle-row label { min-height: 40px; padding: 0 var(--sp-3); font-size: var(--fs-sm); border-color: var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; }
+  .toggle-row label:has(input:checked) { border-color: var(--accent); background: rgba(110,231,183,0.10); }
+  .journal-list { max-height: none; overflow: visible; gap: var(--sp-2); }
+  .journal-entry { padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-sm); }
+  .journal-day { font-size: 14px; }
+  .journal-text { font-size: 14px; color: var(--text); }
+
+  /* omad */
+  .omad-layout { grid-template-columns: minmax(0, 1fr) 340px; gap: var(--sp-5); }
+  .omad-head { margin-bottom: var(--sp-2); gap: var(--sp-2); }
+  .omad-head-actions { margin-left: auto; display: flex; gap: var(--sp-2); }
+  .omad-mini { display: none; font-family: 'DM Sans', sans-serif; font-size: var(--fs-sm); font-weight: 600; color: var(--accent2); background: rgba(245,158,11,0.12); border-radius: 999px; padding: 2px 10px; }
+  .food-item { grid-template-columns: minmax(0, 1fr) 150px 64px auto; gap: var(--sp-3); padding: var(--sp-2); }
+  .food-macros { font-size: var(--fs-xs); color: var(--muted); }
+  .qty-stepper button { width: 36px; height: 36px; }
+  .filter-pill { min-height: 36px; padding: 0 var(--sp-3); font-size: var(--fs-xs); }
+  .meal-chip { min-height: 44px; border-radius: var(--radius-sm); }
+  .meal-totals { background: var(--card-bg); border-radius: var(--radius); padding: var(--sp-5); top: 88px; }
+  .cal-scale { display: flex; justify-content: space-between; align-items: center; font-size: var(--fs-xs); color: var(--muted); }
+  .cal-target { display: inline-flex; align-items: center; gap: 6px; }
+  .cal-target input { width: 84px; min-height: 32px; padding: 4px 8px; font-size: var(--fs-sm); }
+
+  /* modals */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(5,7,12,0.78); z-index: 300; align-items: center; justify-content: center; padding: var(--sp-4); }
+  .modal-scroll { position: fixed; inset: 0; background: rgba(5,7,12,0.78); z-index: 200; overflow-y: auto; padding: var(--sp-5) var(--sp-4); }
+  .modal-card { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 16px; padding: var(--sp-5); width: 100%; max-width: 480px;
+                max-height: calc(100vh - 32px); overflow-y: auto; box-shadow: 0 24px 64px rgba(0,0,0,0.5); }
+  .modal-narrow { max-width: 420px; }
+  .modal-wide { max-width: 720px; margin: 0 auto; max-height: none; overflow: visible; }
+  .modal-title { font-family: 'DM Serif Display', serif; font-size: 20px; color: var(--text); margin-bottom: var(--sp-3); }
+  .modal-text { font-size: var(--fs-sm); color: var(--muted); line-height: 1.55; margin-bottom: var(--sp-3); }
+  .modal-warn { font-size: var(--fs-sm); color: #fca5a5; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.3); border-radius: var(--radius-sm); padding: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-4); line-height: 1.5; }
+  .subpanel { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--sp-4); margin-bottom: var(--sp-4); }
+  .subpanel .section-label { margin-top: 0; }
+  .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+  .food-editor-table { max-height: 400px; }
+
+  /* ── phones / small tablets ── */
+  @media (max-width: 768px) {
+    body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+    header { position: relative; flex-wrap: wrap; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4) var(--sp-3); min-height: 0; }
+    .visible-logo svg { width: 104px; }
+    .header-status { position: absolute; top: 18px; right: var(--sp-4); }
+    .header-tools { order: 2; width: 100%; margin-left: 0; display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: var(--sp-2); }
+    .header-tools .btn { width: 100%; padding: 0 var(--sp-2); }
+    header nav.horizon-divider { position: fixed; left: 0; right: 0; bottom: 0; z-index: 150; order: 3; width: auto; overflow: visible;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-1); padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+      background: rgba(26,29,39,0.97); border-top: 1px solid var(--border); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+    nav button { flex-direction: column; justify-content: center; min-height: 54px; padding: 4px 2px; font-size: var(--fs-xs); gap: 2px; }
+    .nav-ico { font-size: 19px; }
+    .unit-toggle button { min-height: 44px; min-width: 44px; padding: 0 var(--sp-2); }
+    .unit-toggle { padding: 2px; }
+    .page { padding: var(--sp-4); }
+    .card, .journal-form, .meal-totals { padding: var(--sp-4); }
+    .card-header { font-size: 17px; }
+    .stat-value { font-size: 20px; }
+    .btn, .btn-sm { min-height: 44px; }
+    input[type=text], input[type=date], input[type=number], input[type=search], textarea, select { min-height: 44px; font-size: 16px; }
+    .quick-actions .btn { flex: 1 1 0; padding: 0 var(--sp-2); }
+    .entry-row { grid-template-columns: 1fr 1fr; }
+    .entry-row > div:first-child { grid-column: 1 / -1; }
+    .journal-form-grid { grid-template-columns: 1fr 1fr; }
+    .checkin-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .toggle-row label { flex: 1 1 calc(50% - 8px); min-height: 44px; }
+    .form-actions .btn-primary-save { flex: 1; }
+    .delete-btn { min-width: 44px; min-height: 44px; }
+    .range-group input[type=range] { height: 44px; }
+    .range-dates { min-width: 0; width: 100%; text-align: left; }
+    .chart-container { height: 260px; }
+    .col-lbs { display: none; }
+    th, td { padding: 8px; }
+    input.search-input { width: 100%; }
+    .list-toolbar input.search-input { flex: 1 1 180px; width: auto; }
+    .card-header.row .row { flex: 1 1 100%; }
+    .card-header.row .row input.search-input { flex: 1; width: auto; }
+    .omad-layout { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); }
+    .omad-layout .meal-totals { position: static; order: -1; }
+    .omad-head { position: sticky; top: 0; z-index: 20; background: var(--bg); padding: var(--sp-2) 0; margin: 0; }
+    .omad-mini { display: inline-block; }
+    .omad-head-actions { margin-left: auto; }
+    .food-item { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name step" "macros cals"; row-gap: 2px; padding: var(--sp-2) 0; }
+    .food-item > :first-child { grid-area: name; }
+    .food-item .food-macros { grid-area: macros; }
+    .food-item .food-cals { grid-area: cals; padding-right: 46px; }
+    .food-item .qty-stepper { grid-area: step; }
+    .qty-stepper button { width: 44px; height: 44px; }
+    .filter-pill { min-height: 44px; }
+    .meal-chip-preview { max-width: 60vw; }
+    .modal-card, .modal-wide { padding: var(--sp-4); }
+    .form-grid-2 { gap: var(--sp-2); }
+  }
+
+  /* ═══ v2: themes (dark default tokens + light), sunrise save buttons, merged Tracker, account menu ═══ */
+  :root {
+    color-scheme: dark;
+    --placeholder: #8f95ad;
+    --danger-text: #fca5a5;
+    --needle: #ffffff;
+    --nav-bg: rgba(26,29,39,0.97);
+    --macro-p: #60a5fa; --macro-f: #f59e0b; --macro-c: #a78bfa; --macro-fi: #6ee7b7;
+    --chart-weight: #6ee7b7; --chart-fill: rgba(110,231,183,0.08); --chart-trend: #f59e0b; --chart-goal: #818cf8;
+    --chart-tick: #9ba1b9; --chart-grid: rgba(120,128,160,0.18);
+    --save-text: #1a1206;
+  }
+  html[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f4f5f9; --surface: #ffffff; --surface2: #eef0f5; --card-bg: #ffffff;
+    --border: #d9dce6; --border-strong: #848aa2;
+    --text: #161a26; --muted: #535a72; --placeholder: #646a82;
+    --accent: #047857; --accent2: #9a4a08; --accent3: #b91c1c; --goal: #4f46e5;
+    --on-accent: #ffffff; --danger-text: #b91c1c; --needle: #161a26;
+    --fg: #161a26; --muted-fg: #535a72; --horizon-mint: #059669;
+    --nav-bg: rgba(255,255,255,0.97);
+    --macro-p: #1d4ed8; --macro-f: #9a4a08; --macro-c: #6d28d9; --macro-fi: #047857;
+    --chart-weight: #059669; --chart-fill: rgba(5,150,105,0.10); --chart-trend: #c2410c; --chart-goal: #4f46e5;
+    --chart-tick: #535a72; --chart-grid: rgba(30,40,70,0.12);
+    --shadow-glow: 0 6px 18px -10px rgba(194,65,12,0.45), inset 0 0 0 1px rgba(194,65,12,0.25);
+  }
+  input::placeholder, textarea::placeholder { color: var(--placeholder); }
+  .btn-danger-ghost { color: var(--danger-text); }
+  .modal-warn { color: var(--danger-text); }
+  .bmi-needle { background: var(--needle); }
+  header nav.horizon-divider { transition: none; }
+  html[data-theme="light"] .text-sunrise { background-image: none; -webkit-text-fill-color: currentColor; color: var(--accent2); }
+  html[data-theme="light"] .card, html[data-theme="light"] .journal-form, html[data-theme="light"] .stat-card,
+  html[data-theme="light"] .meal-totals { box-shadow: 0 1px 2px rgba(20,24,40,0.06); }
+  html[data-theme="light"] .stat-card { background: var(--surface2); }
+  html[data-theme="light"] .modal-backdrop, html[data-theme="light"] .modal-scroll { background: rgba(20,24,40,0.45); }
+  html[data-theme="light"] .pill-green { background: rgba(4,120,87,0.12); }
+  html[data-theme="light"] .pill-amber { background: rgba(154,74,8,0.12); }
+  html[data-theme="light"] .pill-red { background: rgba(185,28,28,0.10); }
+  html[data-theme="light"] .pill-blue { background: rgba(79,70,229,0.10); }
+  html[data-theme="light"] .omad-mini { background: rgba(154,74,8,0.10); }
+
+  /* primary SAVE actions = sunrise gradient (brand); mint stays for other affirmative/positive cues */
+  .btn.btn-primary-save { background-color: var(--sunrise-warm); background-image: var(--gradient-sunrise); color: var(--save-text); box-shadow: var(--shadow-glow); border: none; }
+  .btn.btn-primary-save:hover { opacity: 0.92; }
+
+  /* header: user menu + theme toggle */
+  .theme-btn { min-width: 40px; padding: 0; font-size: 16px; }
+  .user-btn { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+  .modal-section { margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--border); }
+  .modal-section .section-label { margin-top: 0; }
+  /* merged Tracker: hide reset cards that have nothing to show yet (empty state) */
+  .card:has(> #milestoneGrid:empty), .card:has(> #stateCheck:empty), .card:has(> #quickWins:empty) { display: none; }
+
+  @media (max-width: 768px) {
+    header { flex-wrap: nowrap; align-items: center; padding: var(--sp-2) var(--sp-3); }
+    .visible-logo svg { width: 96px; }
+    .header-tools { order: 2; width: auto; margin-left: auto; display: flex; gap: var(--sp-2); }
+    .header-tools .btn { width: auto; }
+    .user-btn { max-width: 112px; padding: 0 var(--sp-2); }
+    .theme-btn { min-width: 44px; }
+    .header-status { position: fixed; left: 50%; transform: translateX(-50%); top: auto; right: auto;
+      bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 160; pointer-events: none; }
+    .header-status > span { background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; }
+    .header-status > span:empty { display: none; }
+    header nav.horizon-divider { grid-template-columns: repeat(3, 1fr); background: var(--nav-bg); }
+  }
 </style>
 <!-- Firebase compat SDK (loaded sync so available when init() runs) -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -732,19 +1015,16 @@
     </svg>
   </div>
   <nav class="horizon-divider">
-    <button class="active" onclick="showPage('reset')">Reset</button>
-    <button onclick="showPage('tracker')">📈 Tracker</button>
-    <button onclick="showPage('journal')">📓 Journal</button>
-    <button onclick="showPage('omad')">🍽 OMAD Tool</button>
+    <button class="active" onclick="showPage('tracker')"><span class="nav-ico" aria-hidden="true">📈</span>Tracker</button>
+    <button onclick="showPage('journal')"><span class="nav-ico" aria-hidden="true">📓</span>Journal</button>
+    <button onclick="showPage('omad')"><span class="nav-ico" aria-hidden="true">🍽</span>OMAD</button>
   </nav>
-  <div style="margin-left:auto; display:flex; align-items:center; gap:10px;">
-    <span id="saveIndicator" style="font-size:12px; color:var(--accent); opacity:0; transition:opacity 0.4s;">✓ Saved</span>
-    <span id="syncBadge" style="font-size:11px; color:var(--accent); opacity:0; transition:opacity 0.4s;"></span>
-    <button class="btn btn-ghost btn-sm" onclick="openUserModal()" title="Set username for cloud sync">👤 <span id="userLabel">Guest</span></button>
-    <button class="btn btn-ghost btn-sm" onclick="exportJSON()" title="Export all data as JSON backup">⬇ Export</button>
-    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importFile').click()" title="Import JSON backup">⬆ Import</button>
-    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
-    <div class="unit-toggle">
+  <div class="header-tools">
+    <span class="header-status"><span id="saveIndicator" style="opacity:0; transition:opacity 0.4s;">✓ Saved</span>
+    <span id="syncBadge" style="opacity:0; transition:opacity 0.4s;"></span></span>
+    <button class="btn btn-ghost btn-sm user-btn" id="userBtn" onclick="openUserModal()" title="Account: cloud sync, backup export/import" aria-haspopup="dialog">👤 <span id="userLabel">Guest</span></button>
+    <button class="btn btn-ghost btn-sm theme-btn" id="themeToggle" onclick="toggleTheme()" title="Switch light / dark mode" aria-label="Switch to light mode"><span aria-hidden="true" id="themeIcon">☀</span></button>
+    <div class="unit-toggle" role="group" aria-label="Weight unit">
       <button class="active" onclick="setUnit('st')">St/Lb</button>
       <button onclick="setUnit('kg')">KG</button>
     </div>
@@ -752,28 +1032,32 @@
 </header>
 
 <!-- Import confirmation modal -->
-<div id="importModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:300; align-items:center; justify-content:center;">
-  <div style="background:var(--surface); border:1px solid var(--accent); border-radius:16px; padding:24px; max-width:480px; width:90%; margin:0 24px;">
-    <div style="font-family:'DM Serif Display',serif; font-size:16px; color:var(--accent); margin-bottom:12px;">⬆ Import Backup</div>
+<div id="importModal" class="modal-backdrop" style="display:none;">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+    <div class="modal-title" id="importModalTitle">Import backup</div>
     <div id="importModalMsg" style="font-size:13px; color:var(--text); margin-bottom:20px; line-height:1.6;"></div>
     <div style="display:flex; gap:10px; flex-wrap:wrap;">
-      <button class="btn btn-sm" style="background:var(--accent3);" onclick="applyImport('replace')">Replace All</button>
       <button class="btn btn-sm" onclick="applyImport('merge')">Merge</button>
+      <button class="btn btn-sm btn-danger-ghost" onclick="applyImport('replace')">Replace All</button>
       <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importModal').style.display='none'">Cancel</button>
     </div>
   </div>
 </div>
 
 <!-- User / cloud sync modal -->
-<div id="userModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:300; align-items:center; justify-content:center;">
-  <div style="background:var(--surface); border:1px solid var(--accent); border-radius:16px; padding:24px; max-width:400px; width:90%; margin:0 24px;">
-    <div style="font-family:'DM Serif Display',serif; font-size:16px; color:var(--accent); margin-bottom:8px;">☁ Cloud Sync</div>
-    <p style="font-size:12px; color:var(--muted); margin-bottom:16px; line-height:1.6;">
-      Enter a username to sync your data across devices. No password — data is stored under your chosen name.<br>
-      <span style="color:var(--accent3);">⚠ Choose something non-guessable. Anyone who knows your username can read and overwrite your data.</span>
+<div id="userModal" class="modal-backdrop" style="display:none;">
+  <div class="modal-card modal-narrow" role="dialog" aria-modal="true" aria-labelledby="userModalTitle">
+    <div class="row space-between" style="margin-bottom:var(--sp-2);">
+      <div class="modal-title" id="userModalTitle" style="margin-bottom:0;">Account</div>
+      <button class="btn btn-ghost btn-sm" onclick="closeUserModal()" aria-label="Close">✕</button>
+    </div>
+    <div class="section-label" style="margin-top:var(--sp-2);">Cloud sync</div>
+    <p class="modal-text">
+      Enter a username to sync your data across devices. No password — data is stored under your chosen name.
     </p>
-    <input type="text" id="userInput" placeholder="e.g. davejfowler"
-      style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:14px; margin-bottom:16px; box-sizing:border-box;"
+    <p class="modal-warn">⚠ Choose something non-guessable. Anyone who knows your username can read and overwrite your data.</p>
+    <label class="field-label" for="userInput">Username</label>
+    <input type="text" id="userInput" placeholder="e.g. davejfowler" style="margin-bottom:var(--sp-4);"
       onkeydown="if(event.key==='Enter') setUser()">
 
     <!-- Default connect view -->
@@ -785,7 +1069,7 @@
 
     <!-- Shown when username has no Firebase data — choose upload or fresh start -->
     <div id="userNewAccountView" style="display:none;">
-      <p style="font-size:12px; color:var(--text); margin-bottom:10px;">No cloud data found for <strong id="userNewName"></strong>. What would you like to do?</p>
+      <p class="modal-text" style="color:var(--text);">No cloud data found for <strong id="userNewName"></strong>. What would you like to do?</p>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button class="btn btn-sm" onclick="uploadCurrentData()">Upload my current data</button>
         <button class="btn btn-ghost btn-sm" onclick="startFresh()">Start fresh</button>
@@ -793,16 +1077,27 @@
       </div>
     </div>
 
-    <div id="userModalMsg" style="margin-top:12px; font-size:12px; color:var(--muted);"></div>
+    <div id="userModalMsg" class="hint" style="margin-top:var(--sp-3);"></div>
+
+    <!-- Backup (moved here from the header) -->
+    <div class="modal-section">
+      <div class="section-label">Backup</div>
+      <div class="row" style="gap:var(--sp-2);">
+        <button class="btn btn-ghost btn-sm" onclick="exportJSON()" title="Export all data as JSON backup">⬇ Export backup</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeUserModal(); document.getElementById('importFile').click()" title="Import JSON backup">⬆ Import backup</button>
+        <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
+      </div>
+      <p class="hint" style="margin-top:var(--sp-2);">Saves or restores all your weights and journal entries as one JSON file. Import lets you merge or replace.</p>
+    </div>
 
     <!-- Danger zone — only shown when signed in -->
     <div id="userDangerZone" class="danger-zone" style="display:none;">
       <div class="danger-zone-title">Danger zone</div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn btn-ghost btn-sm" style="color:var(--accent3); border-color:var(--accent3);" onclick="clearLocalData()">Clear local data</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--accent3); border-color:var(--accent3);" onclick="deleteAccount()">Delete account</button>
+        <button class="btn btn-sm btn-danger-ghost" onclick="clearLocalData()">Clear local data</button>
+        <button class="btn btn-sm btn-danger-ghost" onclick="deleteAccount()">Delete account</button>
       </div>
-      <p style="font-size:11px; color:var(--muted); margin-top:8px; line-height:1.5;">
+      <p class="hint" style="margin-top:var(--sp-2);">
         <strong>Clear local:</strong> wipes this device only — cloud data safe.<br>
         <strong>Delete account:</strong> permanently removes all cloud data. Irreversible.
       </p>
@@ -813,53 +1108,56 @@
 <!-- ══════════════════════════════════
      PAGE 1: TRACKER
 ══════════════════════════════════ -->
-<div class="page active" id="page-reset">
-  <div class="reset-hero">
-    <div class="card">
-      <div class="card-header">Reset Dashboard</div>
-      <div id="resetHero"></div>
-      <div class="phase-strip" id="phaseStrip"></div>
-    </div>
-    <div class="card">
-      <div class="card-header">Latest Signal</div>
-      <div id="latestSignal"></div>
-    </div>
-  </div>
+<div class="page active" id="page-tracker">
 
-  <div class="grid-2 mb-16">
-    <div class="card">
-      <div class="card-header">Next Milestones</div>
-      <div class="milestone-grid" id="milestoneGrid"></div>
+  <!-- Add Entry -->
+  <div class="card mb-16 card-primary" id="logWeightCard">
+    <div class="card-header">Log weight <span class="card-sub">or tap a row below to edit</span></div>
+    <div class="entry-row" id="entryRow">
+      <div>
+        <label class="field-label">Date</label>
+        <input type="date" id="entryDate">
+      </div>
+      <div>
+        <label class="field-label">Stone</label>
+        <input type="number" id="entryStone" min="0" max="30" placeholder="e.g. 13" oninput="syncEntryFromSt()">
+      </div>
+      <div>
+        <label class="field-label">Lbs (0–13)</label>
+        <input type="number" id="entryLbs" min="0" max="13" placeholder="0–13" oninput="syncEntryFromSt()">
+      </div>
+      <div>
+        <label class="field-label">KG</label>
+        <input type="number" id="entryKg" step="0.1" placeholder="e.g. 88.5" oninput="syncEntryFromKg()">
+      </div>
+      <button class="btn btn-primary-save" onclick="saveEntry()">Save</button>
     </div>
-    <div class="card">
-      <div class="card-header">State Check</div>
-      <div id="stateCheck"></div>
-    </div>
+    <div id="entryMsg" class="form-msg"></div>
   </div>
-
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-header">Quick Wins</div>
-      <div class="win-list" id="quickWins"></div>
-    </div>
-    <div class="card">
-      <div class="card-header">Today</div>
-      <div id="todayPrompt"></div>
-    </div>
-  </div>
-</div>
-
-<div class="page" id="page-tracker">
 
   <!-- Stats row -->
   <div class="stats-grid" id="statsGrid"></div>
 
+  <!-- Reset progress + today (was the Reset tab) -->
+  <div class="grid-2 mb-16" id="resetSection">
+    <div class="card">
+      <div class="card-header">Reset progress</div>
+      <div id="resetHero"></div>
+      <div class="phase-strip" id="phaseStrip"></div>
+    </div>
+    <div class="card">
+      <div class="card-header">Today</div>
+      <div id="todayPrompt"></div>
+      <div id="latestSignal" class="mt-16"></div>
+    </div>
+  </div>
+
   <!-- BMI + Goals -->
   <div class="grid-2 mb-16">
     <div class="card">
-      <div class="card-header">📊 BMI Monitor</div>
+      <div class="card-header">BMI</div>
       <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
-        <span id="bmiValue" style="font-size:28px; font-weight:700; font-family:'DM Serif Display',serif;"></span>
+        <span id="bmiValue" class="big-number"></span>
         <span id="bmiStatus" class="pill pill-amber"></span>
       </div>
       <div class="bmi-bar">
@@ -875,17 +1173,17 @@
     </div>
 
     <div class="card">
-      <div class="card-header">🎯 Goals</div>
+      <div class="card-header">Goals</div>
       <div class="goal-section">
         <div class="goal-input">
-          <label>Start Weight <span style="color:var(--muted);font-size:10px;">(for progress %)</span></label>
+          <label>Start weight <span class="label-note">(for progress %)</span></label>
           <div style="display:flex;gap:6px;align-items:center;">
             <input type="number" id="goalStart" step="0.1" placeholder="kg" oninput="updateGoals(); scheduleGoalPersist()" style="flex:1;">
             <button class="btn btn-ghost btn-sm" onclick="resetGoalStart()" title="Reset to latest weight">↺ Now</button>
           </div>
         </div>
         <div class="goal-input">
-          <label>Target Weight</label>
+          <label>Target weight</label>
           <input type="number" id="goalTarget" step="0.1" placeholder="kg" oninput="updateGoals(); scheduleGoalPersist()">
         </div>
       </div>
@@ -896,9 +1194,9 @@
   <!-- Chart -->
   <div class="card mb-16">
     <div class="card-header row space-between">
-      <span>📉 Weight Over Time</span>
+      <span>Weight over time</span>
       <div class="row" style="gap:8px;">
-        <select id="chartUnit" onchange="renderChart()" style="width:auto; padding:4px 10px;">
+        <select id="chartUnit" onchange="renderChart()" style="width:auto;" aria-label="Chart unit">
           <option value="stone">Stone</option>
           <option value="kg">KG</option>
         </select>
@@ -906,51 +1204,46 @@
     </div>
     <div class="chart-container">
       <canvas id="weightChart"></canvas>
+      <div id="chartEmpty" class="empty-state chart-empty" style="display:none;">
+        <div class="empty-title">No readings yet</div>
+        <div>Log your first weight above — the chart, trend and projection appear after two readings.</div>
+      </div>
     </div>
     <div class="range-controls">
       <div class="range-group" style="flex:2;">
-        <label>Start Date</label>
+        <label for="rangeStart">Chart from</label>
         <input type="range" id="rangeStart" min="0" max="100" step="1" value="0" aria-label="Chart start date" oninput="updateChartRange(event)">
       </div>
       <div class="range-group" style="flex:2;">
-        <label>End Date</label>
+        <label for="rangeEnd">Chart to</label>
         <input type="range" id="rangeEnd" min="0" max="100" step="1" value="100" aria-label="Chart end date" oninput="updateChartRange(event)">
       </div>
-      <div id="rangeDates" class="range-dates" style="font-size:12px; color:var(--muted); min-width:200px; text-align:right;"></div>
+      <div id="rangeDates" class="range-dates"></div>
     </div>
   </div>
 
-  <!-- Add Entry -->
-  <div class="card mb-16">
-    <div class="card-header">➕ Add / Edit Entry</div>
-    <div class="entry-row" id="entryRow">
-      <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Date</label>
-        <input type="date" id="entryDate">
-      </div>
-      <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Stone</label>
-        <input type="number" id="entryStone" min="0" max="30" placeholder="e.g. 13" oninput="syncEntryFromSt()">
-      </div>
-      <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Lbs (0–13)</label>
-        <input type="number" id="entryLbs" min="0" max="13" placeholder="0–13" oninput="syncEntryFromSt()">
-      </div>
-      <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">KG</label>
-        <input type="number" id="entryKg" step="0.1" placeholder="e.g. 88.5" oninput="syncEntryFromKg()">
-      </div>
-      <button class="btn bg-sunrise shadow-glow" style="color:var(--bg);" onclick="saveEntry()">Save</button>
+  <!-- Milestones, state check, quick wins (were on the Reset tab) -->
+  <div class="grid-2 mb-16">
+    <div class="card">
+      <div class="card-header">State check <span class="card-sub">last 14 check-in days</span></div>
+      <div id="stateCheck"></div>
     </div>
-    <div id="entryMsg" style="font-size:12px; color:var(--accent); height:16px;"></div>
+    <div class="card">
+      <div class="card-header">Next milestones</div>
+      <div class="milestone-grid" id="milestoneGrid"></div>
+    </div>
+  </div>
+  <div class="card mb-16">
+    <div class="card-header">Quick wins</div>
+    <div class="win-list" id="quickWins"></div>
   </div>
 
   <!-- Data Table -->
   <div class="card">
     <div class="card-header row space-between">
-      <span>📋 All Records</span>
+      <span>All records</span>
       <div class="row" style="gap:8px;">
-        <input type="text" id="tableSearch" placeholder="Search dates…" style="width:160px; padding:5px 10px;" oninput="renderTable()">
+        <input type="search" id="tableSearch" placeholder="Search dates…" class="search-input" aria-label="Search records by date" oninput="renderTable()">
         <button class="btn btn-ghost btn-sm" onclick="exportCSV()">Export CSV</button>
       </div>
     </div>
@@ -960,11 +1253,11 @@
           <tr>
             <th class="sort-btn" onclick="sortTable('date')">Date ↕</th>
             <th>Stone</th>
-            <th>Lbs</th>
+            <th class="col-lbs">Lbs</th>
             <th>KG</th>
             <th>BMI</th>
             <th>Change</th>
-            <th></th>
+            <th><span class="sr-only">Delete</span></th>
           </tr>
         </thead>
         <tbody id="tableBody"></tbody>
@@ -979,46 +1272,47 @@
 <div class="page" id="page-journal">
 
   <div class="journal-form">
-    <div class="card-header">✍ Journal Entry <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px;">add as many as you like per day</span></div>
-    <div id="jEditBanner" style="display:none;font-size:12px;color:var(--accent2);margin-bottom:10px;"></div>
+    <div class="card-header">Journal entry <span class="card-sub">add as many as you like per day</span></div>
+    <div id="jEditBanner" class="edit-banner" style="display:none;"></div>
     <div class="journal-form-grid">
       <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Date</label>
+        <label class="field-label" for="jDate">Date</label>
         <input type="date" id="jDate">
       </div>
       <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Weight (kg, optional)</label>
-        <input type="number" id="jWeight" step="0.1" placeholder="kg">
-      </div>
-      <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Notes / tags</label>
-        <input type="text" id="jNotes" placeholder="e.g. post-walk, fasted…">
+        <label class="field-label" for="jWeight">Weight (kg, optional)</label>
+        <input type="number" id="jWeight" step="0.1" placeholder="kg" inputmode="decimal">
       </div>
     </div>
-    <div>
-      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Entry</label>
+    <div class="mb-12">
+      <label class="field-label" for="jComment">Entry</label>
       <textarea id="jComment" placeholder="How did today go? What did you eat? Any observations?"></textarea>
     </div>
+    <div class="mb-12">
+      <label class="field-label" for="jNotes">Notes / tags</label>
+      <input type="text" id="jNotes" placeholder="e.g. post-walk, fasted…">
+    </div>
+    <div class="section-label">Daily check-in <span class="label-note">optional · 1 = low, 5 = high</span></div>
     <div class="checkin-grid">
       <div>
         <label>Hunger</label>
-        <input type="number" id="jHunger" min="1" max="5" placeholder="1-5">
+        <input type="number" id="jHunger" min="1" max="5" placeholder="1–5" inputmode="numeric">
       </div>
       <div>
         <label>Food noise</label>
-        <input type="number" id="jFoodNoise" min="1" max="5" placeholder="1-5">
+        <input type="number" id="jFoodNoise" min="1" max="5" placeholder="1–5" inputmode="numeric">
       </div>
       <div>
         <label>Energy</label>
-        <input type="number" id="jEnergy" min="1" max="5" placeholder="1-5">
+        <input type="number" id="jEnergy" min="1" max="5" placeholder="1–5" inputmode="numeric">
       </div>
       <div>
         <label>Focus</label>
-        <input type="number" id="jFocus" min="1" max="5" placeholder="1-5">
+        <input type="number" id="jFocus" min="1" max="5" placeholder="1–5" inputmode="numeric">
       </div>
       <div>
         <label>Sleep</label>
-        <input type="number" id="jSleep" min="1" max="5" placeholder="1-5">
+        <input type="number" id="jSleep" min="1" max="5" placeholder="1–5" inputmode="numeric">
       </div>
       <div>
         <label>Win tag</label>
@@ -1031,16 +1325,16 @@
       <label><input type="checkbox" id="jExercise"> Exercise / walk</label>
       <label><input type="checkbox" id="jQuickWin"> Quick win</label>
     </div>
-    <div class="row mt-12">
-      <button class="btn bg-sunrise shadow-glow" style="color:var(--bg);" id="jSaveBtn" onclick="saveJournal()">Save Entry</button>
+    <div class="row mt-16 form-actions">
+      <button class="btn btn-primary-save" id="jSaveBtn" onclick="saveJournal()">Save Entry</button>
       <button class="btn btn-ghost" onclick="clearJournalForm()">Clear</button>
-      <span id="jMsg" style="font-size:12px; color:var(--accent);"></span>
+      <span id="jMsg" class="form-msg"></span>
     </div>
   </div>
 
-  <div class="row space-between mb-16">
-    <div style="font-size:13px; color:var(--muted);" id="journalCount"></div>
-    <input type="text" id="jSearch" placeholder="Search entries…" style="width:200px; padding:5px 10px;" oninput="renderJournal()">
+  <div class="row space-between mb-16 list-toolbar">
+    <div class="hint" id="journalCount"></div>
+    <input type="search" id="jSearch" placeholder="Search entries…" class="search-input" aria-label="Search journal" oninput="renderJournal()">
   </div>
 
   <div class="journal-list" id="journalList"></div>
@@ -1052,71 +1346,71 @@
 <div class="page" id="page-omad">
 
   <!-- FOOD EDITOR MODAL -->
-  <div id="foodEditorModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:200; overflow-y:auto; padding:24px;">
-    <div style="max-width:700px; margin:0 auto; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:24px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
-        <div class="card-header" style="margin-bottom:0;">✏️ Edit Food Database</div>
+  <div id="foodEditorModal" class="modal-scroll" style="display:none;">
+    <div class="modal-card modal-wide" role="dialog" aria-modal="true" aria-label="Edit food database">
+      <div class="row space-between" style="margin-bottom:var(--sp-4);">
+        <div class="modal-title" style="margin-bottom:0;">Edit food database</div>
         <button class="btn btn-ghost btn-sm" onclick="closeFoodEditor()">✕ Close</button>
       </div>
 
       <!-- Add new food -->
-      <div style="background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:18px;">
-        <div style="font-size:12px; color:var(--muted); margin-bottom:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.07em;">Add New Food</div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+      <div class="subpanel">
+        <div class="section-label">Add new food</div>
+        <div class="form-grid-2">
           <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Category</label>
+            <label class="field-label">Category</label>
             <input type="text" id="newFoodCat" list="catSuggestions" placeholder="e.g. SEAFOOD">
             <datalist id="catSuggestions"></datalist>
           </div>
           <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Food Name</label>
+            <label class="field-label">Food Name</label>
             <input type="text" id="newFoodName" placeholder="e.g. Tuna Steak">
           </div>
           <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Serving Size</label>
+            <label class="field-label">Serving Size</label>
             <input type="text" id="newFoodServing" placeholder="e.g. 200g">
           </div>
           <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Calories</label>
+            <label class="field-label">Calories</label>
             <input type="number" id="newFoodCals" placeholder="0" min="0">
           </div>
           <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Protein (g)</label>
+            <label class="field-label">Protein (g)</label>
             <input type="number" id="newFoodProtein" placeholder="0" min="0" step="0.1">
           </div>
           <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Fat (g)</label>
+            <label class="field-label">Fat (g)</label>
             <input type="number" id="newFoodFat" placeholder="0" min="0" step="0.1">
           </div>
           <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Carbs (g)</label>
+            <label class="field-label">Carbs (g)</label>
             <input type="number" id="newFoodCarbs" placeholder="0" min="0" step="0.1">
           </div>
           <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px;">Fibre (g)</label>
+            <label class="field-label">Fibre (g)</label>
             <input type="number" id="newFoodFibre" placeholder="0" min="0" step="0.1">
           </div>
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
-          <button class="btn btn-sm" onclick="addFoodItem()">Add Food</button>
+          <button class="btn btn-sm btn-primary-save" onclick="addFoodItem()">Add Food</button>
           <span id="foodEditorMsg" style="font-size:12px; color:var(--accent);"></span>
         </div>
       </div>
 
       <!-- Existing foods list -->
-      <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">Existing foods — click a row to edit, ✕ to delete</div>
-      <div style="max-height:400px; overflow-y:auto; border:1px solid var(--border); border-radius:10px;">
-        <table style="width:100%; border-collapse:collapse;" id="foodEditorTable">
-          <thead style="position:sticky;top:0;background:var(--surface2);">
+      <div class="hint" style="margin-bottom:var(--sp-2);">Existing foods — tap a row to edit, ✕ to delete</div>
+      <div class="data-table-wrapper food-editor-table">
+        <table id="foodEditorTable">
+          <thead>
             <tr>
-              <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;">Category</th>
-              <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;">Name</th>
-              <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;">Serving</th>
-              <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;">Cal</th>
-              <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;">P</th>
-              <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;">F</th>
-              <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;">C</th>
-              <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;">Fi</th>
+              <th>Category</th>
+              <th>Name</th>
+              <th>Serving</th>
+              <th class="num">Cal</th>
+              <th class="num">P</th>
+              <th class="num">F</th>
+              <th class="num">C</th>
+              <th class="num">Fi</th>
               <th></th>
             </tr>
           </thead>
@@ -1128,9 +1422,10 @@
 
   <div class="omad-layout">
     <div>
-      <div class="card-header" style="margin-bottom:16px;">
-        🍽 OMAD Meal Builder
-        <div style="margin-left:auto; display:flex; gap:8px;">
+      <div class="card-header omad-head">
+        Meal builder
+        <span class="omad-mini" aria-live="polite"><span id="totCalsMini">0</span> cal</span>
+        <div class="omad-head-actions">
           <button class="btn btn-ghost btn-sm" onclick="openFoodEditor()">✏️ Edit Foods</button>
           <button class="btn btn-ghost btn-sm" onclick="clearMeal()">Clear All</button>
         </div>
@@ -1139,41 +1434,41 @@
     </div>
 
     <div class="meal-totals">
-      <div class="card-header">Today's Meal</div>
+      <div class="card-header">Today's meal</div>
 
       <div style="margin-bottom:16px;">
         <div style="display:flex; justify-content:space-between; align-items:baseline;">
           <span style="font-size:12px; color:var(--muted);">Calories</span>
-          <span id="totCals" style="font-size:32px; font-weight:700; font-family:'DM Serif Display',serif; color:var(--accent2);">0</span>
+          <span id="totCals" class="big-number" style="color:var(--accent2);">0</span>
         </div>
         <div class="calorie-gauge"><div class="calorie-fill" id="calGauge" style="width:0%"></div></div>
-        <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--muted);">
+        <div class="cal-scale">
           <span>0</span>
-          <span>Target: <input type="number" id="calTarget" value="1500" style="width:60px; padding:2px 6px; font-size:11px; background:var(--surface2); border:1px solid var(--border); border-radius:4px; color:var(--text);" oninput="updateTotals(); scheduleGoalPersist()"></span>
+          <label class="cal-target">Target <input type="number" id="calTarget" value="1500" inputmode="numeric" oninput="updateTotals(); scheduleGoalPersist()"></label>
           <span id="calTargetLabel">1500</span>
         </div>
       </div>
 
       <div class="total-row">
         <span class="total-label">Protein</span>
-        <span class="total-value" id="totProtein" style="color:#60a5fa;">0 g</span>
+        <span class="total-value" id="totProtein" style="color:var(--macro-p);">0 g</span>
       </div>
       <div class="total-row">
         <span class="total-label">Fat</span>
-        <span class="total-value" id="totFat" style="color:#f59e0b;">0 g</span>
+        <span class="total-value" id="totFat" style="color:var(--macro-f);">0 g</span>
       </div>
       <div class="total-row">
         <span class="total-label">Carbs</span>
-        <span class="total-value" id="totCarbs" style="color:#a78bfa;">0 g</span>
+        <span class="total-value" id="totCarbs" style="color:var(--macro-c);">0 g</span>
       </div>
       <div class="total-row">
         <span class="total-label">Fibre</span>
-        <span class="total-value" id="totFibre" style="color:#6ee7b7;">0 g</span>
+        <span class="total-value" id="totFibre" style="color:var(--macro-fi);">0 g</span>
       </div>
 
       <div class="mt-12" id="omadSummary"></div>
 
-      <button class="btn bg-sunrise shadow-glow mt-12" style="width:100%;color:var(--bg);" onclick="logMealToJournal()">📓 Log to Journal</button>
+      <button class="btn btn-primary-save mt-12" style="width:100%;" onclick="logMealToJournal()">Log to Journal</button>
     </div>
   </div>
 </div>
@@ -1715,13 +2010,14 @@ function replaySunRise(root = document) {
 }
 
 function showPage(id) {
+  if (id === 'reset') id = 'tracker'; // Reset tab was merged into Tracker
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
   const evt = typeof event !== 'undefined' ? event : null;
   const navBtn = evt?.target?.closest?.('nav button') || document.querySelector(`nav button[onclick="showPage('${id}')"]`);
   if (navBtn) navBtn.classList.add('active');
-  if (id === 'reset') renderReset();
+  if (id === 'tracker') renderReset();
   replaySunRise();
 }
 
@@ -1767,10 +2063,15 @@ function phaseStatus(phase, latestDate) {
 
 function renderReset() {
   if (!document.getElementById('resetHero')) return;
+  document.getElementById('todayPrompt').innerHTML = `
+    <div style="font-size:13px;color:var(--muted);line-height:1.55;">
+      Log the smallest useful signal today: hunger, food noise, energy, focus, sleep, OMAD kept, and one quick win if there is one.
+    </div>
+    <button class="btn mt-12" onclick="showPage('journal'); document.getElementById('jHunger').focus()">✍ Open daily check-in</button>`;
   const latest = latestWeightRecord();
   if (!latest) {
     ['phaseStrip','latestSignal','milestoneGrid','quickWins','stateCheck'].forEach(id => { document.getElementById(id).innerHTML = ''; });
-    document.getElementById('resetHero').innerHTML = '<div style="color:var(--muted);font-size:13px;">No weight entries yet. Add one on the Tracker tab.</div>';
+    document.getElementById('resetHero').innerHTML = '<div class="empty-state"><div class="empty-title">Start here</div><div>Log your first weight above and your reset day, phase, milestones and wins fill in automatically.</div></div>';
     return;
   }
   const today = localDateStr();
@@ -1778,18 +2079,12 @@ function renderReset() {
   const startDate = PHASES[0].start;
   const currentPhase = activePhase(today);
   const resetDay = Math.max(1, daysBetween(startDate, today) + 1);
-  const totalLoss = summary.totalLost;
   const targetKg = parseFloat(document.getElementById('goalTarget')?.value) || 74;
-  const toTarget = Math.max(0, latest.kg - targetKg);
-  const b = bmi(latest.kg);
-  const status = bmiStatus(b);
 
   document.getElementById('resetHero').innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;">
-      <div><div class="stat-label">Reset Day</div><div class="stat-value text-sunrise">${resetDay}</div><div class="stat-sub">Started ${startDate}</div></div>
-      <div><div class="stat-label">Current Phase</div><div class="stat-value" style="color:var(--accent);">${esc(currentPhase.name)}</div><div class="stat-sub">${esc(currentPhase.note)}</div></div>
-      <div><div class="stat-label">Total Lost</div><div class="stat-value text-sunrise">${totalLoss.toFixed(1)} kg</div><div class="stat-sub">${fmtWeight(latest.kg, currentUnit)} now</div></div>
-      <div><div class="stat-label">Target Gap</div><div class="stat-value">${toTarget.toFixed(1)} kg</div><div class="stat-sub">Target ${targetKg.toFixed(1)} kg</div></div>
+      <div><div class="stat-label">Reset day</div><div class="stat-value text-sunrise">${resetDay}</div><div class="stat-sub">Started ${startDate}</div></div>
+      <div><div class="stat-label">Current phase</div><div class="stat-value" style="color:var(--accent);">${esc(currentPhase.name)}</div><div class="stat-sub">${esc(currentPhase.note)}</div></div>
     </div>`;
 
   document.getElementById('phaseStrip').innerHTML = PHASES.map(p => {
@@ -1805,7 +2100,6 @@ function renderReset() {
   const latestJournal = journalDesc.find(j => (j.comment || '').trim() || j.checkin);
   const latestWin = journalDesc.find(journalHasQuickWin);
   document.getElementById('latestSignal').innerHTML = `
-    <div class="pill ${status.cls}" style="margin-bottom:10px;">BMI ${b.toFixed(1)} · ${status.label}</div>
     <div style="font-size:13px;color:var(--muted);line-height:1.55;">
       <b style="color:var(--text);">Latest entry:</b><br>
       ${latestJournal ? `${esc(latestJournal.date)} · ${esc(shortText(latestJournal.comment || latestJournal.checkin?.winTag || 'Structured check-in'))}` : 'No journal signal yet.'}
@@ -1815,13 +2109,11 @@ function renderReset() {
       ${latestWin ? `${esc(latestWin.date)} · ${esc(shortText(latestWin.checkin?.winTag || latestWin.comment))}` : 'Mark a quick win in today’s check-in.'}
     </div>`;
 
-  const healthyKg = 24.9 * HEIGHT_M * HEIGHT_M;
   const nextStoneBoundaryKg = Math.floor(latest.kg / KG_PER_STONE) * KG_PER_STONE;
   const nextFiveKg = Math.floor(latest.kg / 5) * 5;
   const milestones = [
     {label:'Next stone line', value:fmtStone(nextStoneBoundaryKg), gap:latest.kg - nextStoneBoundaryKg},
-    {label:'Healthy BMI', value:`${healthyKg.toFixed(1)} kg`, gap:latest.kg - healthyKg},
-    {label:'Target weight', value:`${targetKg.toFixed(1)} kg`, gap:latest.kg - targetKg},
+    // Healthy-BMI weight and target weight are already on the BMI and Goals cards, so not repeated here.
     {label:'Next 5 kg marker', value:`${nextFiveKg.toFixed(0)} kg`, gap:latest.kg - nextFiveKg}
   ].filter(m => m.gap > 0.05);
   document.getElementById('milestoneGrid').innerHTML = milestones.map(m => `
@@ -1844,11 +2136,6 @@ function renderReset() {
       <div class="stat-card"><div class="stat-label">Alcohol days</div><div class="stat-value">${sc.days ? sc.alcoholDays : '—'}</div><div class="stat-sub">of last ${sc.days || 0} check-in days</div></div>
     </div>`;
 
-  document.getElementById('todayPrompt').innerHTML = `
-    <div style="font-size:13px;color:var(--muted);line-height:1.55;">
-      Log the smallest useful signal today: hunger, food noise, energy, focus, sleep, OMAD kept, and one quick win if there is one.
-    </div>
-    <button class="btn mt-12" onclick="showPage('journal')">Open Daily Check-in</button>`;
 }
 
 // ═══════════════════════════════════════
@@ -1858,7 +2145,7 @@ function renderStats() {
   const today = localDateStr();
   const s = weightSummary(weightData, {trueStartKg, baselineFrom: BASELINE_FROM, todayStr: today});
   if (!s) {
-    document.getElementById('statsGrid').innerHTML = `<div class="stat-card" style="grid-column:1/-1;"><div class="stat-label">No weight entries yet</div><div class="stat-sub">Add your first reading below.</div></div>`;
+    document.getElementById('statsGrid').innerHTML = `<div class="stat-card empty-state" style="grid-column:1/-1;"><div class="empty-title">No weight entries yet</div><div>Your stats appear here once you log a reading above.</div></div>`;
     document.getElementById('bmiValue').textContent = '—';
     document.getElementById('bmiStatus').textContent = '';
     requestAnimationFrame(() => renderChart());
@@ -2114,6 +2401,8 @@ function renderChart() {
   renderGoalOutput(m);
   if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
   const rangeDatesEl = document.getElementById('rangeDates');
+  const chartEmptyEl = document.getElementById('chartEmpty');
+  if (chartEmptyEl) chartEmptyEl.style.display = m.n ? 'none' : '';
   if (!m.n) { rangeDatesEl.textContent = 'No weight entries yet'; return; }
 
   const toVal = kg => unit === 'kg' ? kg : kg / KG_PER_STONE;
@@ -2144,13 +2433,14 @@ function renderChart() {
   const goalDataset = hasTarget ? [{
     label: 'Goal',
     data: [{x: xMin, y: toVal(m.targetKg)}, {x: xEnd, y: toVal(m.targetKg)}],
-    borderColor: '#818cf8', borderWidth: 1.5, borderDash: [3, 5], pointRadius: 0, tension: 0, parsing: false,
+    borderColor: chartColors().goal, borderWidth: 1.5, borderDash: [3, 5], pointRadius: 0, tension: 0, parsing: false,
   }] : [];
   const projDataset = projData.length ? [{
     label: p.status === 'past' ? 'Projection (stale data)' : 'Projection',
-    data: projData, borderColor: '#f59e0b', borderWidth: 1.5, borderDash: [2, 4], pointRadius: [0, 3], tension: 0, parsing: false,
+    data: projData, borderColor: chartColors().trend, borderWidth: 1.5, borderDash: [2, 4], pointRadius: [0, 3], tension: 0, parsing: false,
   }] : [];
 
+  const C = chartColors();
   const ctx = document.getElementById('weightChart').getContext('2d');
   chartInstance = new Chart(ctx, {
     type: 'line',
@@ -2160,11 +2450,11 @@ function renderChart() {
           label: unit === 'kg' ? 'Weight (kg)' : 'Weight (st lb)',
           data: points,
           parsing: false,
-          borderColor: '#6ee7b7',
-          backgroundColor: 'rgba(110,231,183,0.08)',
+          borderColor: C.weight,
+          backgroundColor: C.fill,
           borderWidth: 2,
           pointRadius: points.length < 50 ? 4 : 2,
-          pointBackgroundColor: '#6ee7b7',
+          pointBackgroundColor: C.weight,
           tension: 0.3,
           cubicInterpolationMode: 'monotone', // no overshoot between readings
           fill: true,
@@ -2172,7 +2462,7 @@ function renderChart() {
         {
           label: 'Trend',
           data: trendData,
-          borderColor: '#f59e0b', borderWidth: 2, borderDash: [5, 4], pointRadius: 0, tension: 0, parsing: false,
+          borderColor: C.trend, borderWidth: 2, borderDash: [5, 4], pointRadius: 0, tension: 0, parsing: false,
         },
         ...projDataset,
         ...goalDataset
@@ -2182,7 +2472,7 @@ function renderChart() {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { color: '#7a7f9a', font: { family: 'DM Sans' } } },
+        legend: { labels: { color: C.tick, font: { family: 'DM Sans', size: 12 } } },
         tooltip: {
           callbacks: {
             title: (items) => {
@@ -2206,24 +2496,57 @@ function renderChart() {
             tooltipFormat: 'yyyy-MM-dd',
             displayFormats: { day: 'dd MMM', week: 'dd MMM', month: 'MMM yyyy', quarter: 'MMM yyyy', year: 'yyyy' }
           },
-          title: { display: true, text: 'Date', color: '#7a7f9a', font: { size: 10 } },
-          ticks: { color: '#7a7f9a', maxTicksLimit: 8, font: { size: 10 }, maxRotation: 0 },
-          grid: { color: 'rgba(46,50,72,0.5)' }
+          title: { display: true, text: 'Date', color: C.tick, font: { size: 12 } },
+          ticks: { color: C.tick, maxTicksLimit: 8, font: { size: 12 }, maxRotation: 0 },
+          grid: { color: C.grid }
         },
         y: {
           min: yAxis.min,
           max: yAxis.max,
-          title: { display: true, text: unit === 'kg' ? 'kg' : 'st lb', color: '#7a7f9a', font: { size: 10 } },
+          title: { display: true, text: unit === 'kg' ? 'kg' : 'st lb', color: C.tick, font: { size: 12 } },
           ticks: {
-            color: '#7a7f9a', font: { size: 11 }, stepSize: yAxis.stepSize,
+            color: C.tick, font: { size: 12 }, stepSize: yAxis.stepSize,
             callback: v => unit === 'kg' ? String(Math.round(v * 10) / 10) : fmtStoneTick(v)
           },
-          grid: { color: 'rgba(46,50,72,0.5)' }
+          grid: { color: C.grid }
         }
       }
     }
   });
 }
+
+// Chart colours come from CSS tokens so both themes stay legible.
+function chartColors() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = (n, d) => cs.getPropertyValue(n).trim() || d;
+  return { weight: v('--chart-weight', '#6ee7b7'), fill: v('--chart-fill', 'rgba(110,231,183,0.08)'), trend: v('--chart-trend', '#f59e0b'),
+           goal: v('--chart-goal', '#818cf8'), tick: v('--chart-tick', '#9ba1b9'), grid: v('--chart-grid', 'rgba(120,128,160,0.18)') };
+}
+
+// ═══════════════════════════════════════
+// THEME (presentation only: separate localStorage key 'weightTheme')
+// ═══════════════════════════════════════
+function currentTheme() { return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'; }
+function applyTheme(t, redraw = true) {
+  document.documentElement.dataset.theme = t;
+  const icon = document.getElementById('themeIcon'), btn = document.getElementById('themeToggle');
+  if (icon) icon.textContent = t === 'light' ? '☾' : '☀';
+  if (btn) btn.setAttribute('aria-label', t === 'light' ? 'Switch to dark mode' : 'Switch to light mode');
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', t === 'light' ? '#ffffff' : '#1a1d27');
+  if (redraw && document.getElementById('weightChart') && typeof Chart !== 'undefined') renderChart();
+}
+function toggleTheme() {
+  const t = currentTheme() === 'light' ? 'dark' : 'light';
+  try { localStorage.setItem('weightTheme', t); } catch (e) {}
+  applyTheme(t);
+}
+if (window.matchMedia) {
+  const mq = matchMedia('(prefers-color-scheme: light)');
+  const follow = e => { let saved = null; try { saved = localStorage.getItem('weightTheme'); } catch (_) {} if (!saved) applyTheme(e.matches ? 'light' : 'dark'); };
+  mq.addEventListener ? mq.addEventListener('change', follow) : mq.addListener(follow);
+}
+document.addEventListener('DOMContentLoaded', () => applyTheme(currentTheme(), false));
 
 // ═══════════════════════════════════════
 // ENTRY FORM
@@ -2310,15 +2633,15 @@ function renderTable() {
     const {cls} = bmiStatus(b);
     const id = esc(d.id);
     return `<tr data-id="${id}">
-      <td>${esc(d.date)}${d.time ? `<br><span style="font-size:10px;color:var(--muted)">${esc(d.time)}</span>` : ''}</td>
-      <td>${fmtStone(d.kg)}</td>
-      <td>${(d.kg * LB_PER_KG).toFixed(1)} lb</td>
+      <td class="nowrap">${esc(d.date)}${d.time ? `<br><span class="cell-sub">${esc(d.time)}</span>` : ''}</td>
+      <td class="nowrap">${fmtStone(d.kg)}</td>
+      <td class="nowrap col-lbs">${(d.kg * LB_PER_KG).toFixed(1)} lb</td>
       <td>${d.kg.toFixed(1)}</td>
-      <td><span class="pill ${cls}" style="font-size:10px;">${b.toFixed(1)}</span></td>
-      <td style="color:${change === null ? 'var(--muted)' : change < 0 ? 'var(--accent)' : 'var(--accent3)'}">${change === null ? '—' : (change > 0 ? '+' : '') + change.toFixed(2) + ' kg'}</td>
+      <td><span class="pill ${cls}">${b.toFixed(1)}</span></td>
+      <td class="nowrap" style="color:${change === null ? 'var(--muted)' : change < 0 ? 'var(--accent)' : 'var(--accent3)'}">${change === null ? '—' : (change > 0 ? '+' : '') + change.toFixed(2) + ' kg'}</td>
       <td class="del-cell"><button class="delete-btn" data-id="${id}" onclick="confirmDelete(this.dataset.id)" title="Delete this reading">✕</button></td>
     </tr>`;
-  }).join('');
+  }).join('') || `<tr><td colspan="7" class="empty-row">${weightData.length ? 'No readings match that search.' : 'No readings yet — log your first weight above.'}</td></tr>`;
 }
 
 function rowCell(id) {
@@ -2492,10 +2815,10 @@ function renderJournal() {
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           ${j.weight ? `<span class="journal-weight-badge">${esc(j.weight)} kg · ${fmtStone(j.weight)}</span>` : ''}
-          <button class="delete-btn" data-id="${esc(j.id)}" onclick="event.stopPropagation();deleteJournal(this)" title="Delete this entry">✕</button>
+          <button class="delete-btn" data-id="${esc(j.id)}" onclick="event.stopPropagation();deleteJournal(this)" title="Delete this entry" aria-label="Delete this entry">✕</button>
         </div>
       </div>
-      ${j.comment ? `<div class="journal-text" style="color:var(--muted);font-size:12px;">${esc(shortText(j.comment, 80))}</div>` : ''}
+      ${j.comment ? `<div class="journal-text">${esc(shortText(j.comment, 120))}</div>` : (!j.checkin && !j.notes ? '<div class="journal-text empty-hint">No text — tap to add</div>' : '')}
       ${j.checkin ? `<div class="row mt-12" style="gap:6px;">
         ${j.checkin.omadKept ? '<span class="tag">OMAD</span>' : ''}
         ${j.checkin.alcohol ? '<span class="tag">Alcohol</span>' : ''}
@@ -2507,7 +2830,7 @@ function renderJournal() {
       </div>` : ''}
       ${j.notes ? `<div class="journal-notes">${esc(j.notes)}</div>` : ''}
     </div>
-  `).join('');
+  `).join('') || `<div class="empty-state"><div class="empty-title">${journalData.length ? 'Nothing matches that search' : 'No journal entries yet'}</div><div>${journalData.length ? 'Try a date like 2026-10 or a word from the entry.' : 'Write one line above — even “felt fine, OMAD kept” counts.'}</div></div>`;
 }
 
 // Two-tap delete of ONE entry (by id). Other entries on the same date are untouched.
@@ -2563,7 +2886,7 @@ function renderOMAD() {
         </button>`;
     }).join('');
     const toggleBtn = mealsWithSnap.length > 5
-      ? `<button class="btn btn-ghost btn-sm" onclick="toggleMealsExpanded()" style="font-size:11px;">${omadMealsExpanded ? '▲ Less' : `All (${mealsWithSnap.length})`}</button>`
+      ? `<button class="btn btn-ghost btn-sm" onclick="toggleMealsExpanded()">${omadMealsExpanded ? '▲ Less' : `All (${mealsWithSnap.length})`}</button>`
       : '';
     recentMealsHtml = `
       <div class="recent-meals-panel">
@@ -2596,12 +2919,12 @@ function renderOMAD() {
               <div class="food-name">${esc(f.name)}</div>
               <div class="food-meta">${esc(f.serving)}</div>
             </div>
-            <div style="font-size:11px;color:var(--muted);">P:${esc(f.protein)}g F:${esc(f.fat)}g C:${esc(f.carbs)}g</div>
+            <div class="food-macros">P ${esc(f.protein)} · F ${esc(f.fat)} · C ${esc(f.carbs)} g</div>
             <div class="food-cals">${esc(f.cals)} cal</div>
             <div class="qty-stepper">
-              <button data-key="${esc(key)}" data-delta="-0.5" onclick="stepQtyFromEl(this)">−</button>
+              <button data-key="${esc(key)}" data-delta="-0.5" onclick="stepQtyFromEl(this)" aria-label="Less ${esc(f.name)}">−</button>
               <span class="qty-display ${qty > 0 ? 'has-qty' : ''}" id="qty-display-${esc(key)}">${qtyStr}</span>
-              <button data-key="${esc(key)}" data-delta="0.5" onclick="stepQtyFromEl(this)">+</button>
+              <button data-key="${esc(key)}" data-delta="0.5" onclick="stepQtyFromEl(this)" aria-label="More ${esc(f.name)}">+</button>
             </div>
           </div>`;
         }).join('')}
@@ -2685,6 +3008,7 @@ function updateTotals() {
   });
 
   document.getElementById('totCals').textContent = Math.round(totCals);
+  const mini = document.getElementById('totCalsMini'); if (mini) mini.textContent = Math.round(totCals);
   document.getElementById('totProtein').textContent = totP.toFixed(1) + ' g';
   document.getElementById('totFat').textContent = totF.toFixed(1) + ' g';
   document.getElementById('totCarbs').textContent = totC.toFixed(1) + ' g';
